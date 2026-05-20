@@ -33,17 +33,6 @@ class Item extends Model
         return $this->belongsTo(ItemGroup::class);
     }
 
-    public function warehouse()
-    {
-        return $this->hasOneThrough(
-            Warehouse::class,
-            ItemGroup::class,
-            'id',
-            'id',
-            'item_group_id',
-            'warehouse_id'
-        );
-    }
 
     public function creator()
     {

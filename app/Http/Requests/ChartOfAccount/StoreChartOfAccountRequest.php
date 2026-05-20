@@ -3,6 +3,7 @@
 namespace App\Http\Requests\ChartOfAccount;
 
 use App\Constants\AccountTypes;
+use App\Constants\ChartOfAccountCategories;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -48,6 +49,31 @@ class StoreChartOfAccountRequest extends FormRequest
             'account_type' => [
                 'required',
                 Rule::in(AccountTypes::values()),
+            ],
+
+            'account_level' => [
+                'required',
+                Rule::in(['parent', 'child']),
+            ],
+
+            'parent_account_id' => [
+                'required_if:account_level,child',
+                'nullable',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_level', 'parent')
+                    ->whereNull('deleted_at'),
+            ],
+
+            'root_category' => [
+                'required_if:account_type,other',
+                'nullable',
+                Rule::in(ChartOfAccountCategories::roots()),
+            ],
+
+            'sub_category' => [
+                'required',
+                Rule::in(ChartOfAccountCategories::subCategories()),
             ],
 
             'is_active' => ['nullable', 'boolean'],

@@ -15,13 +15,15 @@ return new class extends Migration
                 ->constrained('employees')
                 ->cascadeOnDelete();
 
-            $table->string('shift_type_name');
-            $table->time('start_time');
-            $table->time('end_time');
+            $table->foreignId('shift_id')
+                ->constrained('shifts')
+                ->cascadeOnDelete();
 
             $table->boolean('is_default')->default(true);
 
             $table->timestamps();
+
+            $table->unique(['employee_id', 'shift_id']);
         });
     }
 

@@ -4,6 +4,7 @@ namespace App\Services\Item;
 
 use App\Models\Company;
 use App\Models\Item;
+use App\Models\ItemGroup;
 use App\Exports\ItemsExport;
 use App\Imports\ItemsImport;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -16,7 +17,7 @@ class ItemService
     public function getAll(array $filters): LengthAwarePaginator
     {
         $query = Item::query()
-            ->with(['company', 'itemGroup.warehouse', 'creator']);
+            ->with(['company', 'itemGroup', 'creator']);
 
         if (!empty($filters['search'])) {
             $search = $filters['search'];
@@ -37,13 +38,7 @@ class ItemService
             $query->where('item_group_id', $filters['item_group_id']);
         }
 
-        if (!empty($filters['warehouse_id'])) {
-            $warehouseId = $filters['warehouse_id'];
-
-            $query->whereHas('itemGroup', function ($q) use ($warehouseId) {
-                $q->where('warehouse_id', $warehouseId);
-            });
-        }
+       
 
         if (!empty($filters['status'])) {
             $query->where('status', $filters['status']);
@@ -66,25 +61,25 @@ class ItemService
     public function getById(int $id): Item
     {
         return Item::query()
-            ->with(['company', 'itemGroup.warehouse', 'creator'])
+            ->with(['company', 'itemGroup', 'creator'])
             ->findOrFail($id);
     }
 
-    public function create(array $data): Item
+  public function create(array $data): Item
     {
         $company = Company::query()->firstOrFail();
-
+       
         $data['company_id'] = $company->id;
         $data['created_by'] = auth('api')->id();
-
-        return Item::create($data)->load(['company', 'itemGroup.warehouse', 'creator']);
+  
+        return Item::create($data)->load(['company', 'itemGroup', 'creator']);
     }
 
     public function update(Item $item, array $data): Item
     {
         $item->update($data);
 
-        return $item->fresh()->load(['company', 'itemGroup.warehouse', 'creator']);
+        return $item->fresh()->load(['company', 'itemGroup', 'creator']);
     }
 
     public function delete(Item $item): void
@@ -94,9 +89,17 @@ class ItemService
    public function scanBarcode(string $barcode): ?Item
 {
     return Item::query()
-        ->with(['company', 'itemGroup.warehouse', 'creator'])
+        ->with(['company', 'itemGroup', 'creator'])
         ->where('barcode', $barcode)
         ->first();
+}
+ public function restore(Item $item): void
+{
+    if (!$item->trashed()) {
+        abort(400, 'Item is not deleted.');
+    }
+
+    $item->restore();
 }
 
 public function exportExcel()
@@ -106,9 +109,9 @@ public function exportExcel()
 
 public function importExcel($file): array
 {
-    $import = new ItemsImport();
+   $import = new ItemsImport((int) request('item_group_id'));
 
-    Excel::import($import, $file);
+Excel::import($import, $file);
 
     return [
         'imported' => $import->getRowCount(),
@@ -118,7 +121,7 @@ public function importExcel($file): array
 public function printBarcode(int $id)
 {
     $item = Item::query()
-        ->with(['itemGroup.warehouse'])
+        ->with(['itemGroup'])
         ->findOrFail($id);
 
     if (empty($item->barcode)) {
@@ -142,5 +145,14 @@ public function printBarcode(int $id)
     ])->setPaper([0, 0, 198, 95]);
 
     return $pdf->download("barcode-{$item->barcode}.pdf");
+}
+public function getActiveForDropdown()
+{
+    return ItemGroup::query()
+        ->whereNull('deleted_at')
+        ->where('is_active', true)
+        ->select('id', 'name_ar', 'name_en')
+        ->orderBy('name_en')
+        ->get();
 }
 }

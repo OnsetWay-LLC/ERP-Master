@@ -21,7 +21,7 @@ class ChartOfAccountResource extends JsonResource
             'root_category' => $this->root_category,
             'sub_category' => $this->sub_category,
             'account_type' => $this->account_type,
-
+            'account_level' => $this->account_level,
             'is_active' => $this->is_active,
             'is_system' => $this->is_system,
 

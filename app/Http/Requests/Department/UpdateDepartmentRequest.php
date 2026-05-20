@@ -16,8 +16,7 @@ class UpdateDepartmentRequest extends FormRequest
    public function rules(): array
 {
     return [
-        'company_id' => ['required', 'exists:companies,id'],
-
+       
         'name_ar' => [
             'required',
             'string',

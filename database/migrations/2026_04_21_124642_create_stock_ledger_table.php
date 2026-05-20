@@ -6,38 +6,47 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-       Schema::create('stock_ledger', function (Blueprint $table) {
-    $table->id();
+        Schema::create('stock_ledger', function (Blueprint $table) {
+            $table->id();
 
-    $table->foreignId('company_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('company_id')
+                ->constrained('companies')
+                ->cascadeOnDelete();
 
-    $table->foreignId('item_id')->constrained()->noActionOnDelete();
-    $table->foreignId('warehouse_id')->constrained('warehouses')->noActionOnDelete();
+            $table->foreignId('item_id')
+                ->constrained('items')
+                ->noActionOnDelete();
 
-    $table->date('entry_date');
+            $table->foreignId('warehouse_id')
+                ->constrained('warehouses')
+                ->noActionOnDelete();
 
-    $table->string('reference_type'); 
-    // sales_invoice, purchase_invoice, stock_entry
+            $table->date('entry_date');
 
-    $table->unsignedBigInteger('reference_id');
+            $table->string('reference_type'); 
+            // stock_entry, sales_invoice, purchase_invoice
 
-    $table->decimal('quantity_in', 18, 2)->default(0);
-    $table->decimal('quantity_out', 18, 2)->default(0);
+            $table->unsignedBigInteger('reference_id');
 
-    $table->decimal('balance_qty', 18, 2);
+            $table->decimal('quantity_in', 18, 2)->default(0);
+            $table->decimal('quantity_out', 18, 2)->default(0);
 
-    $table->timestamps();
-});
+            $table->decimal('balance_qty', 18, 2)->default(0);
+
+            $table->decimal('basic_rate', 18, 2)->default(0);
+            $table->decimal('stock_value', 18, 2)->default(0);
+            $table->decimal('balance_value', 18, 2)->default(0);
+
+            $table->timestamps();
+
+            $table->index(['company_id', 'item_id', 'warehouse_id']);
+            $table->index(['reference_type', 'reference_id']);
+            $table->index(['company_id', 'entry_date']);
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('stock_ledger');

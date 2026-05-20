@@ -79,4 +79,12 @@ class ItemGroupController extends Controller
             'message' => 'Item group deleted successfully.',
         ]);
     }
+    public function restore(ItemGroup $itemGroup): JsonResponse
+    {
+        $this->service->restore($itemGroup);
+
+        return response()->json([
+            'message' => 'Item group restored successfully.',
+        ]);
+    }
 }

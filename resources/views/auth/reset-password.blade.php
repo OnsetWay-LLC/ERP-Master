@@ -390,10 +390,7 @@
                     </form>
 
                     <div class="back-link">
-                        <a href="#">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                            Back to Login
-                        </a>
+                       
                     </div>
                 </div>
 
@@ -451,7 +448,7 @@
                 const data = await res.json();
                 if (!res.ok) throw data;
                 document.getElementById('successMsg').classList.add('show');
-                setTimeout(() => window.location.href = '/login', 2500);
+             
             } catch (err) {
                 let msg = 'Something went wrong. Please try again.';
                 if (err.message) msg = err.message;

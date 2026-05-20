@@ -6,30 +6,52 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('stock_entries', function (Blueprint $table) {
-    $table->id();
+            $table->id();
 
-    $table->foreignId('company_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('company_id')
+                ->constrained('companies')
+                ->cascadeOnDelete();
 
-    $table->string('entry_type'); // receipt, issue, transfer
-    $table->date('entry_date');
+            $table->string('series');
 
-    $table->string('status')->default('draft');
+            $table->enum('entry_type', [
+                'material_receipt',
+                'material_issue',
+                'material_transfer',
+            ]);
 
-    $table->foreignId('created_by')->nullable()->constrained('users')->noActionOnDelete();
+            $table->date('posting_date');
+            $table->time('posting_time');
 
-    $table->timestamps();
-});
+            $table->decimal('total_incoming_value', 18, 2)->default(0);
+            $table->decimal('total_outgoing_value', 18, 2)->default(0);
+            $table->decimal('value_difference', 18, 2)->default(0);
+
+            $table->enum('status', [
+                'draft',
+                'submitted',
+                'cancelled',
+            ])->default('submitted');
+
+            $table->foreignId('created_by')
+                ->nullable()
+                ->constrained('users')
+                ->noActionOnDelete();
+
+            $table->timestamps();
+            $table->softDeletes();
+
+            $table->unique(['company_id', 'series'], 'stock_entries_company_series_unique');
+
+            $table->index(['company_id', 'entry_type']);
+            $table->index(['company_id', 'posting_date']);
+            $table->index(['company_id', 'status']);
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('stock_entries');

@@ -31,7 +31,7 @@ class StoreCustomerRequest extends FormRequest
             'country' => [
                 'nullable',
                 'string',
-                'in:' . implode(',', array_keys(config('company.countries'))),
+                'max:100'
             ],
         ];
     }

@@ -79,4 +79,12 @@ class CustomerController extends Controller
             'message' => 'Customer deleted successfully.',
         ]);
     }
+    Public function restore(Customer $customer): JsonResponse
+    {
+        $this->service->restore($customer);
+
+        return response()->json([
+            'message' => 'Customer restored successfully.',
+        ]);
+    }
 }

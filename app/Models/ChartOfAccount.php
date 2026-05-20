@@ -20,6 +20,7 @@ class ChartOfAccount extends Model
         'root_category',
         'sub_category',
         'account_type',
+        'account_level',
         'is_active',
         'is_system',
         'created_by',
@@ -44,7 +45,10 @@ class ChartOfAccount extends Model
     {
         return $this->hasMany(ChartOfAccount::class, 'parent_id');
     }
-
+public function childrenRecursive()
+{
+    return $this->children()->with('childrenRecursive');
+}
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

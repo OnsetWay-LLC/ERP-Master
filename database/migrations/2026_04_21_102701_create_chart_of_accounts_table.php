@@ -30,7 +30,7 @@ return new class extends Migration
     $table->string('root_category'); 
     $table->string('sub_category')->nullable();
     $table->string('account_type');
-
+    $table->enum('account_level', ['parent', 'child'])->default('child');
     $table->boolean('is_active')->default(true);
     $table->boolean('is_system')->default(false);
 
@@ -50,6 +50,7 @@ return new class extends Migration
     $table->index(['company_id', 'sub_category']);
     $table->index(['company_id', 'account_type']);
     $table->index(['company_id', 'parent_id']);
+    $table->index(['company_id', 'account_level']);
 }); 
     }
 

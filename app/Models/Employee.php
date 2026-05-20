@@ -26,6 +26,11 @@ class Employee extends Model
         'marital_status',
     ];
 
+    protected $casts = [
+        'date_of_joining' => 'date',
+        'salary_value' => 'decimal:2',
+    ];
+
     public function company()
     {
         return $this->belongsTo(Company::class);
@@ -38,15 +43,18 @@ class Employee extends Model
 
     public function shifts()
     {
-        return $this->hasMany(EmployeeShift::class);
+        return $this->belongsToMany(Shift::class, 'employee_shifts')
+            ->withPivot('is_default')
+            ->withTimestamps();
     }
 
     public function educations()
     {
         return $this->hasMany(EmployeeEducation::class);
     }
+
     public function user()
-{
-    return $this->hasOne(User::class);
-}
+    {
+        return $this->hasOne(User::class);
+    }
 }

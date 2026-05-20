@@ -18,7 +18,6 @@ class StoreItemGroupRequest extends FormRequest
         $companyId = Company::query()->value('id');
 
         return [
-            'warehouse_id' => ['required', 'exists:warehouses,id'],
 
             'name_ar' => [
                 'required',

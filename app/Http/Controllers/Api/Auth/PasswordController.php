@@ -18,10 +18,10 @@ class PasswordController extends Controller
 
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse
     {
-        $this->forgotPasswordService->sendResetLink($request->validated('email'));
+        $this->forgotPasswordService->sendCode($request->validated());
 
         return response()->json([
-            'message' => 'Password reset link sent successfully.',
+            'message' => 'Password reset code sent successfully.',
         ]);
     }
 

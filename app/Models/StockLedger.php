@@ -18,6 +18,18 @@ class StockLedger extends Model
         'quantity_in',
         'quantity_out',
         'balance_qty',
+        'basic_rate',
+        'stock_value',
+        'balance_value',
+    ];
+      protected $casts = [
+        'entry_date' => 'date',
+        'quantity_in' => 'decimal:2',
+        'quantity_out' => 'decimal:2',
+        'balance_qty' => 'decimal:2',
+        'basic_rate' => 'decimal:2',
+        'stock_value' => 'decimal:2',
+        'balance_value' => 'decimal:2',
     ];
 
     public function item()

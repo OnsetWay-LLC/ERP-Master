@@ -14,17 +14,21 @@ class ItemsImport implements ToCollection, WithHeadingRow
 {
     protected int $rowCount = 0;
 
+    public function __construct(
+        protected int $itemGroupId
+    ) {}
+
     public function collection(Collection $rows): void
     {
         $company = Company::query()->firstOrFail();
 
         foreach ($rows as $row) {
             $data = [
-                'item_group_id' => $row['item_group_id'] ?? null,
-                'item_code' => $row['item_code'] ?? null,
+                'item_group_id' => $this->itemGroupId,
+                'item_code' => isset($row['item_code']) ? (string) $row['item_code'] : null,
                 'name_ar' => $row['name_ar'] ?? null,
                 'name_en' => $row['name_en'] ?? null,
-                'barcode' => $row['barcode'] ?? null,
+                'barcode' => isset($row['barcode']) ? (string) $row['barcode'] : null,
                 'selling_price' => $row['selling_price'] ?? 0,
                 'purchase_price' => $row['purchase_price'] ?? 0,
                 'currency_code' => $row['currency_code'] ?? $company->currency_code,
@@ -33,10 +37,10 @@ class ItemsImport implements ToCollection, WithHeadingRow
 
             Validator::make($data, [
                 'item_group_id' => ['required', 'exists:item_groups,id'],
-                'item_code' => ['required', 'string'],
+                'item_code' => ['required', 'max:100'],
                 'name_ar' => ['required', 'string'],
                 'name_en' => ['required', 'string'],
-                'barcode' => ['nullable', 'string'],
+                'barcode' => ['nullable', 'max:100'],
                 'selling_price' => ['required', 'numeric', 'min:0'],
                 'purchase_price' => ['required', 'numeric', 'min:0'],
                 'currency_code' => ['required', 'string', 'max:10'],

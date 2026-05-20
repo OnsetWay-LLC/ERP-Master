@@ -11,11 +11,9 @@ return new class extends Migration
         Schema::create('journal_entry_lines', function (Blueprint $table) {
             $table->id();
 
-            // ✅ التصحيح: حذفنا restrictOnDelete() من جميع العلاقات
-            // SQL Server سيعتمد الافتراضي (NO ACTION) الذي يمنع الحذف تلقائياً
-            $table->foreignId('company_id')->constrained('companies');
-            $table->foreignId('journal_entry_id')->constrained('journal_entries');
-            $table->foreignId('account_id')->constrained('chart_of_accounts');
+           $table->foreignId('company_id')->constrained('companies')->noActionOnDelete();
+$table->foreignId('journal_entry_id')->constrained('journal_entries')->noActionOnDelete();
+$table->foreignId('account_id')->constrained('chart_of_accounts')->noActionOnDelete();
 
             $table->decimal('debit', 18, 2)->default(0);
             $table->decimal('credit', 18, 2)->default(0);

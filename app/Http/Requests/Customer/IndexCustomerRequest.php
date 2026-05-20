@@ -19,7 +19,7 @@ class IndexCustomerRequest extends FormRequest
             'country' => [
                 'nullable',
                 'string',
-                'in:' . implode(',', array_keys(config('company.countries'))),
+                'max:100'
             ],
             'city' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],

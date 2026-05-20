@@ -26,17 +26,28 @@ class RolePermissionSeeder extends Seeder
             'screen.roles',
             'screen.users',
             'screen.employees',
+            'screen.shifts',
 
             'screen.chart_of_accounts',
             'screen.default_accounts',
-            'screen.journal_entries',
+           'screen.journal_entries.view',
+            'screen.journal_entries.create',
+            'screen.journal_entries.update',
+            'screen.journal_entries.delete',
+            'screen.journal_entries.submit',
+            'screen.journal_entries.cancel',
             'screen.general_ledger',
             'screen.trial_balance',
             'screen.balance_sheet',
             'screen.profit_and_loss',
             'screen.tax',
+            'screen.fees_templates',
             'screen.assets',
+            'screen.asset_items',
+            'screen.asset_locations',
             'screen.bank',
+            'screen.bank_accounts',
+            'screen.bank_reconciliation',
 
             'screen.customers',
             'screen.sales_orders',
@@ -44,6 +55,7 @@ class RolePermissionSeeder extends Seeder
 
             'screen.suppliers',
             'screen.purchase_orders',
+            'screen.purchase_receipts',
             'screen.purchase_invoices',
 
             'screen.warehouses',
@@ -57,22 +69,36 @@ class RolePermissionSeeder extends Seeder
         $accountantChief->syncPermissions([
             'screen.chart_of_accounts',
             'screen.default_accounts',
-            'screen.journal_entries',
+            'screen.journal_entries.view',
+            'screen.journal_entries.create',
+            'screen.journal_entries.update',
+            'screen.journal_entries.delete',
+            'screen.journal_entries.submit',
+            'screen.journal_entries.cancel',
             'screen.general_ledger',
             'screen.trial_balance',
             'screen.balance_sheet',
             'screen.profit_and_loss',
             'screen.tax',
+            'screen.fees_templates',
             'screen.assets',
+            'screen.asset_items',
+            'screen.asset_locations',
             'screen.bank',
+            'screen.bank_accounts',
+            'screen.bank_reconciliation',
             'screen.sales_invoices',
             'screen.purchase_invoices',
+            
         ]);
 
         $accountantSub->syncPermissions([
             'screen.sales_invoices',
             'screen.purchase_invoices',
-            'screen.journal_entries',
+            'screen.journal_entries.view',
+            'screen.journal_entries.create',
+            'screen.journal_entries.update',
+            'screen.journal_entries.delete',
             'screen.general_ledger',
         ]);
 
@@ -96,6 +122,7 @@ class RolePermissionSeeder extends Seeder
             'screen.stock_entries',
             'screen.material_requests',
             'screen.stock_ledger',
+             'screen.purchase_receipts'
         ]);
 
         $hr->syncPermissions([

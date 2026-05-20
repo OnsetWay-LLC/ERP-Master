@@ -18,28 +18,31 @@ class StoreItemRequest extends FormRequest
         $companyId = Company::query()->value('id');
 
         return [
-            'item_group_id' => ['required', 'exists:item_groups,id'],
+            'item_group_id' => [
+    'required',
+    'integer',
+    Rule::exists('item_groups', 'id')
+        ->whereNull('deleted_at'),
+],
 
-            'item_code' => [
-                'required',
-                'string',
-                'max:100',
-                Rule::unique('items', 'item_code')
-                    ->where(fn ($q) => $q->where('company_id', $companyId))
-                    ->whereNull('deleted_at'),
-            ],
+          'item_code' => [
+    'required',
+    'max:100',
+    Rule::unique('items', 'item_code')
+        ->where(fn ($q) => $q->where('company_id', $companyId))
+        ->whereNull('deleted_at'),
+],
 
             'name_ar' => ['required', 'string', 'max:255'],
             'name_en' => ['required', 'string', 'max:255'],
 
-            'barcode' => [
-                'nullable',
-                'string',
-                'max:100',
-                Rule::unique('items', 'barcode')
-                    ->where(fn ($q) => $q->where('company_id', $companyId))
-                    ->whereNull('deleted_at'),
-            ],
+           'barcode' => [
+    'nullable',
+    'max:100',
+    Rule::unique('items', 'barcode')
+        ->where(fn ($q) => $q->where('company_id', $companyId))
+        ->whereNull('deleted_at'),
+],
 
             'selling_price' => ['required', 'numeric', 'min:0'],
             'purchase_price' => ['required', 'numeric', 'min:0'],

@@ -28,14 +28,11 @@ class UpdateEmployeeRequest extends FormRequest
         'address' => ['nullable'],
 
         'salary_mode' => ['nullable', 'in:bank_transfer,cash,cheques'],
-        'salary_value' => ['nullable', 'decimal:15,2'],
+        'salary_value' => ['nullable'],
         'marital_status' => ['nullable', 'in:single,married'],
 
-'shifts' => ['nullable', 'array'],
-'shifts.*.shift_type_name' => ['sometimes', 'string'],
-'shifts.*.start_time' => ['sometimes', 'date_format:H:i'], 
-
-'shifts.*.end_time'   => ['sometimes', 'date_format:H:i'],
+'shift_ids' => ['nullable', 'array'],
+'shift_ids.*' => ['integer', 'exists:shifts,id'],
         'educations' => ['nullable', 'array'],
         'educations.*.school_university' => ['sometimes', 'string'],
         'educations.*.qualification' => ['sometimes', 'string'],

@@ -16,9 +16,6 @@ return new class extends Migration
                 ->constrained('companies')
                 ->cascadeOnDelete();
 
-            $table->foreignId('warehouse_id')
-                ->constrained('warehouses')
-                ->noActionOnDelete();
 
             $table->string('name_ar');
             $table->string('name_en');

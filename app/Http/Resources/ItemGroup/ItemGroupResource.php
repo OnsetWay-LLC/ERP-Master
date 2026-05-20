@@ -15,11 +15,7 @@ class ItemGroupResource extends JsonResource
             'name_ar' => $this->name_ar,
             'name_en' => $this->name_en,
 
-            'warehouse' => [
-                'id' => $this->warehouse?->id,
-                'name_ar' => $this->warehouse?->name_ar,
-                'name_en' => $this->warehouse?->name_en,
-            ],
+          
 
             'company' => [
                 'id' => $this->company?->id,

@@ -15,7 +15,6 @@ class IndexItemGroupRequest extends FormRequest
     {
         return [
             'search' => ['nullable', 'string', 'max:255'],
-            'warehouse_id' => ['nullable', 'exists:warehouses,id'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
             'trashed' => ['nullable', 'in:with,only'],

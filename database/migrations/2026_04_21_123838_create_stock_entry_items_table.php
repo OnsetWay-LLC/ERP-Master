@@ -6,29 +6,47 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
-      Schema::create('stock_entry_items', function (Blueprint $table) {
-    $table->id();
+        Schema::create('stock_entry_items', function (Blueprint $table) {
+            $table->id();
 
-    $table->foreignId('stock_entry_id')->constrained()->cascadeOnDelete();
-    $table->foreignId('item_id')->constrained()->noActionOnDelete();
+            $table->foreignId('stock_entry_id')
+                ->constrained('stock_entries')
+                ->cascadeOnDelete();
 
-    $table->foreignId('source_warehouse_id')->nullable()->constrained('warehouses')->noActionOnDelete();
-    $table->foreignId('target_warehouse_id')->nullable()->constrained('warehouses')->noActionOnDelete();
+            $table->foreignId('item_id')
+                ->constrained('items')
+                ->noActionOnDelete();
 
-    $table->decimal('quantity', 18, 2);
+            $table->string('barcode')->nullable();
 
-    $table->timestamps();
-});
+            $table->foreignId('source_warehouse_id')
+                ->nullable()
+                ->constrained('warehouses')
+                ->noActionOnDelete();
+
+            $table->foreignId('target_warehouse_id')
+                ->nullable()
+                ->constrained('warehouses')
+                ->noActionOnDelete();
+
+            $table->decimal('quantity', 18, 2);
+
+            $table->decimal('basic_rate', 18, 2)->default(0);
+
+            $table->decimal('incoming_value', 18, 2)->default(0);
+            $table->decimal('outgoing_value', 18, 2)->default(0);
+            $table->decimal('value_difference', 18, 2)->default(0);
+
+            $table->timestamps();
+
+            $table->index(['item_id']);
+            $table->index(['source_warehouse_id']);
+            $table->index(['target_warehouse_id']);
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('stock_entry_items');

@@ -11,7 +11,6 @@ class ItemGroup extends Model
 
     protected $fillable = [
         'company_id',
-        'warehouse_id',
         'name_ar',
         'name_en',
         'created_by',
@@ -22,10 +21,7 @@ class ItemGroup extends Model
         return $this->belongsTo(Company::class);
     }
 
-    public function warehouse()
-    {
-        return $this->belongsTo(Warehouse::class);
-    }
+   
 
     public function creator()
     {

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\ChartOfAccount;
 
+use App\Constants\ChartOfAccountCategories;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ChartOfAccount\StoreChartOfAccountRequest;
 use App\Http\Requests\ChartOfAccount\UpdateChartOfAccountRequest;
@@ -23,18 +24,27 @@ class ChartOfAccountController extends Controller
         return 1;
     }
 
-    public function index(Request $request): JsonResponse
-    {
-        $accounts = $this->service->getAll(
-            $this->companyId(),
-            $request->only(['root_category', 'sub_category', 'account_type'])
-        );
+  public function index(Request $request): JsonResponse
+{
+    $filters = $request->only([
+        'root_category',
+        'sub_category',
+        'account_type',
+        'account_level',
+    ]);
 
-        return response()->json([
-            'status' => true,
-            'data' => ChartOfAccountResource::collection($accounts),
-        ]);
-    }
+    $filters['root_categories'] = $request->input('root_categories', []);
+
+    $accounts = $this->service->getAll(
+        $this->companyId(),
+        $filters
+    );
+
+    return response()->json([
+        'status' => true,
+        'data' => ChartOfAccountResource::collection($accounts),
+    ]);
+}
 
     public function tree(): JsonResponse
     {
@@ -122,5 +132,13 @@ class ChartOfAccountController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    public function subCategoriesByType(string $accountType): JsonResponse
+    {
+        return response()->json([
+            'status' => true,
+            'data' => ChartOfAccountCategories::subCategoriesByAccountType($accountType),
+        ]);
     }
 }

@@ -16,12 +16,16 @@ return new class extends Migration
         ->cascadeOnDelete();
 
     $table->string('entry_number');
-
+   
     $table->date('entry_date');
-
+$table->decimal('total_debit', 18, 2)->default(0);
+$table->decimal('total_credit', 18, 2)->default(0);
+$table->timestamp('posted_at')->nullable();
+$table->timestamp('cancelled_at')->nullable();
     $table->text('description')->nullable();
+    $table->unsignedBigInteger('reversed_entry_id')->nullable();
 
-    $table->enum('status', ['draft', 'posted'])->default('draft');
+    $table->enum('status', ['draft', 'posted','cancelled'])->default('draft');
 
     $table->foreignId('created_by')
         ->nullable()

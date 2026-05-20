@@ -17,7 +17,6 @@ class UpdateItemGroupRequest extends FormRequest
         $itemGroup = $this->route('itemGroup');
 
         return [
-            'warehouse_id' => ['sometimes', 'required', 'exists:warehouses,id'],
 
             'name_ar' => [
                 'sometimes',

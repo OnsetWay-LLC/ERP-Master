@@ -8,8 +8,6 @@ return new class extends Migration
 {
     public function up(): void
     {
-        //يخزن الحسابات الافتراضية للشركة (Core requirement)
-        //*هذا أهم جدول بعد COA:كل العمليات لاحقًا (بيع/شراء/مخزون) تعتمد عليه ما بدنا نكرر اختيار الحسابات كل مرة
         Schema::create('company_account_settings', function (Blueprint $table) {
             $table->id();
 
@@ -18,21 +16,100 @@ return new class extends Migration
                 ->constrained('companies')
                 ->cascadeOnDelete();
 
-            $table->foreignId('default_bank_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_cash_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_receivable_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_payable_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_income_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_cogs_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_discount_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_accumulated_depreciation_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_depreciation_expense_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_asset_disposal_gain_loss_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_inventory_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-            $table->foreignId('default_sales_tax_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
-$table->foreignId('default_purchase_tax_account_id')->nullable()->constrained('chart_of_accounts')->noActionOnDelete();
+            // Bank / Cash / AR / AP
+            $table->foreignId('default_bank_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
 
-            $table->timestamps();   
+            $table->foreignId('default_cash_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            $table->foreignId('default_receivable_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            $table->foreignId('default_payable_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            // Income
+            $table->foreignId('default_direct_income_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            $table->foreignId('default_indirect_income_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            // Cost of Goods Sold
+            $table->foreignId('default_cogs_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            // Expenses
+            $table->foreignId('default_direct_expense_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            $table->foreignId('default_indirect_expense_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            // Payment Discount
+            $table->foreignId('default_payment_discount_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+         
+
+           
+
+            $table->foreignId('gain_loss_asset_disposal_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            // Inventory
+            $table->foreignId('default_inventory_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            $table->foreignId('inventory_adjustment_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            // Equity
+            $table->foreignId('default_equity_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            // Other
+            $table->foreignId('other_account_id')
+                ->nullable()
+                ->constrained('chart_of_accounts')
+                ->noActionOnDelete();
+
+            $table->timestamps();
+
+            $table->index('default_bank_account_id');
+            $table->index('default_cash_account_id');
+            $table->index('default_receivable_account_id');
+            $table->index('default_payable_account_id');
+            $table->index('default_inventory_account_id');
         });
     }
 

@@ -3,241 +3,190 @@
 namespace App\Services\ChartOfAccount;
 
 use App\Constants\AccountTypes;
+use App\Constants\ChartOfAccountCategories;
 use App\Models\ChartOfAccount;
-use App\Models\Company;
-use App\Services\ChartOfAccount\ChartOfAccountsSetupService;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class ChartOfAccountService
 {
-    public function getAll(int $companyId, array $filters = [])
-    {
-        return ChartOfAccount::query()
-            ->where('company_id', $companyId)
-            ->when(!empty($filters['root_category']), function ($query) use ($filters) {
-                $query->where('root_category', $filters['root_category']);
-            })
-            ->when(!empty($filters['sub_category']), function ($query) use ($filters) {
-                $query->where('sub_category', $filters['sub_category']);
-            })
-            ->when(!empty($filters['account_type']), function ($query) use ($filters) {
-                $query->where('account_type', $filters['account_type']);
-            })
-            ->orderBy('account_number')
-            ->get();
-    }
+  public function getAll(int $companyId, array $filters = []): Collection
+{
+    return ChartOfAccount::query()
+        ->where('company_id', $companyId)
+        ->when($filters['root_category'] ?? null, fn ($q, $v) => $q->where('root_category', $v))
+        ->when($filters['root_categories'] ?? null, fn ($q, $v) => $q->whereIn('root_category', (array) $v))
+        ->when($filters['sub_category'] ?? null, fn ($q, $v) => $q->where('sub_category', $v))
+        ->when($filters['account_type'] ?? null, fn ($q, $v) => $q->where('account_type', $v))
+        ->when($filters['account_level'] ?? null, fn ($q, $v) => $q->where('account_level', $v))
+        ->orderBy('account_number')
+        ->get();
+}
 
     public function getTree(int $companyId): Collection
     {
         return ChartOfAccount::query()
             ->where('company_id', $companyId)
             ->whereNull('parent_id')
-            ->with([
-                'children.children.children',
-            ])
+            ->with('childrenRecursive')
             ->orderBy('account_number')
             ->get();
     }
 
-    public function create(array $data, int $companyId, ?int $userId = null): ChartOfAccount
-{
-    return DB::transaction(function () use ($data, $companyId, $userId) {
+    public function create(array $data, int $companyId, ?int $createdBy = null): ChartOfAccount
+    {
+        $accountType = $data['account_type'];
+        $accountLevel = $data['account_level'];
+        $subCategory = $data['sub_category'];
 
-        // 👇 نحدد الأب مباشرة حسب نوع الحساب
-        $parent = match ($data['account_type']) {
+        ChartOfAccountCategories::validateTypeWithSubCategory($accountType, $subCategory);
 
-            // Assets → Current Assets
-            'cash', 'bank', 'receivable', 'stock' =>
-                ChartOfAccount::where('company_id', $companyId)
-                    ->where('account_number', '1100') // Current Assets
-                    ->first(),
+        $rootCategory = $accountType === AccountTypes::OTHER
+            ? $data['root_category']
+            : ChartOfAccountCategories::rootBySubCategory($subCategory);
 
-            // Assets → Fixed Assets
-            'fixed_asset', 'accumulated_depreciation' =>
-                ChartOfAccount::where('company_id', $companyId)
-                    ->where('account_number', '1200')
-                    ->first(),
-
-            // Liabilities → Current Liabilities
-            'payable', 'tax' =>
-                ChartOfAccount::where('company_id', $companyId)
-                    ->where('account_number', '2100')
-                    ->first(),
-
-            // Income
-            'direct_income' =>
-                ChartOfAccount::where('company_id', $companyId)
-                    ->where('account_number', '4100')
-                    ->first(),
-
-            'indirect_income' =>
-                ChartOfAccount::where('company_id', $companyId)
-                    ->where('account_number', '4200')
-                    ->first(),
-
-            // Expenses
-            'direct_expense', 'cost_of_goods_sold' =>
-                ChartOfAccount::where('company_id', $companyId)
-                    ->where('account_number', '5100')
-                    ->first(),
-
-            'indirect_expense', 'depreciation' =>
-                ChartOfAccount::where('company_id', $companyId)
-                    ->where('account_number', '5200')
-                    ->first(),
-
-            default => null
-        };
-
-        if (!$parent) {
-            throw new InvalidArgumentException('Parent account not found.');
+        if ($accountLevel === 'child') {
+            $parent = $this->findSelectedParent(
+                $companyId,
+                (int) $data['parent_account_id'],
+                $accountType,
+                $rootCategory,
+                $subCategory
+            );
+        } else {
+            $parent = $this->findCategoryParent(
+                $companyId,
+                $rootCategory,
+                $subCategory
+            );
         }
 
         return ChartOfAccount::create([
             'company_id' => $companyId,
             'parent_id' => $parent->id,
+
             'name_ar' => $data['name_ar'],
             'name_en' => $data['name_en'],
             'account_number' => $data['account_number'],
-            'account_type' => $data['account_type'],
-            'root_category' => $parent->root_category,
-            'sub_category' => $parent->sub_category,
+
+            'root_category' => $rootCategory,
+            'sub_category' => $subCategory,
+            'account_type' => $accountType,
+            'account_level' => $accountLevel,
+
             'is_active' => $data['is_active'] ?? true,
             'is_system' => false,
-            'created_by' => $userId,
+            'created_by' => $createdBy,
         ]);
-    });
-}
+    }
+
     public function update(ChartOfAccount $account, array $data): ChartOfAccount
     {
         if ($account->is_system) {
-            throw new InvalidArgumentException('لا يمكن تعديل حساب أساسي من الشجرة.');
+            throw new InvalidArgumentException('The selected account is a system account and cannot be modified.');
         }
 
-        if (isset($data['account_type'])) {
-            $classification = $this->resolveClassification($data['account_type']);
+        $accountType = $data['account_type'] ?? $account->account_type;
+        $accountLevel = $data['account_level'] ?? $account->account_level;
+        $subCategory = $data['sub_category'] ?? $account->sub_category;
 
-            $parentId = $this->resolveParentId(
+        ChartOfAccountCategories::validateTypeWithSubCategory($accountType, $subCategory);
+
+        $rootCategory = $accountType === AccountTypes::OTHER
+            ? ($data['root_category'] ?? $account->root_category)
+            : ChartOfAccountCategories::rootBySubCategory($subCategory);
+
+        if ($accountLevel === 'child') {
+            $parentId = $data['parent_account_id'] ?? $account->parent_id;
+
+            $parent = $this->findSelectedParent(
                 $account->company_id,
-                $classification['root_category'],
-                $classification['sub_category']
+                (int) $parentId,
+                $accountType,
+                $rootCategory,
+                $subCategory
             );
-
-            if (!$parentId) {
-                throw new InvalidArgumentException('لم يتم العثور على التصنيف الأساسي لهذا النوع من الحساب.');
+        } else {
+            if ($account->children()->exists()) {
+                throw new InvalidArgumentException('The selected account has child accounts and cannot be converted.');
             }
 
-            $data['root_category'] = $classification['root_category'];
-            $data['sub_category'] = $classification['sub_category'];
-            $data['parent_id'] = $parentId;
+            $parent = $this->findCategoryParent(
+                $account->company_id,
+                $rootCategory,
+                $subCategory
+            );
         }
 
-        $account->update($data);
+        $account->update([
+            ...$data,
+            'parent_id' => $parent->id,
+            'root_category' => $rootCategory,
+            'sub_category' => $subCategory,
+            'account_type' => $accountType,
+            'account_level' => $accountLevel,
+        ]);
 
-        return $account->fresh();
+        return $account->fresh('children');
     }
 
     public function delete(ChartOfAccount $account): void
     {
         if ($account->is_system) {
-            throw new InvalidArgumentException('لا يمكن حذف حساب أساسي من الشجرة.');
+            throw new InvalidArgumentException('The selected account is a system account and cannot be deleted.');
         }
 
         if ($account->children()->exists()) {
-            throw new InvalidArgumentException('لا يمكن حذف حساب لديه حسابات فرعية.');
+            throw new InvalidArgumentException('The selected account has child accounts and cannot be deleted.');
         }
 
         $account->delete();
     }
 
-    public function resolveClassification(string $accountType): array
-    {
-        return match ($accountType) {
-            AccountTypes::CASH,
-            AccountTypes::BANK,
-            AccountTypes::RECEIVABLE,
-            AccountTypes::STOCK => [
-                'root_category' => 'assets',
-                'sub_category' => 'current_assets',
-            ],
+    private function findCategoryParent(
+        int $companyId,
+        string $rootCategory,
+        string $subCategory
+    ): ChartOfAccount {
+        $parent = ChartOfAccount::query()
+            ->where('company_id', $companyId)
+            ->where('root_category', $rootCategory)
+            ->where('sub_category', $subCategory)
+            ->where('account_type', 'system')
+            ->where('account_level', 'parent')
+            ->where('is_system', true)
+            ->first();
 
-            AccountTypes::FIXED_ASSET,
-            AccountTypes::ACCUMULATED_DEPRECIATION => [
-                'root_category' => 'assets',
-                'sub_category' => 'fixed_assets',
-            ],
+        if (! $parent) {
+            throw new InvalidArgumentException('The selected classification does not exist in the chart of accounts.');
+        }
 
-            AccountTypes::PAYABLE,
-            AccountTypes::TAX => [
-                'root_category' => 'liabilities',
-                'sub_category' => 'current_liabilities',
-            ],
-
-            AccountTypes::EQUITY => [
-                'root_category' => 'equity',
-                'sub_category' => 'opening_balance_equity',
-            ],
-
-            AccountTypes::DIRECT_INCOME => [
-                'root_category' => 'income',
-                'sub_category' => 'direct_income',
-            ],
-
-            AccountTypes::INDIRECT_INCOME => [
-                'root_category' => 'income',
-                'sub_category' => 'indirect_income',
-            ],
-
-            AccountTypes::DIRECT_EXPENSE,
-            AccountTypes::COST_OF_GOODS_SOLD => [
-                'root_category' => 'expenses',
-                'sub_category' => 'direct_expenses',
-            ],
-
-            AccountTypes::INDIRECT_EXPENSE,
-            AccountTypes::DEPRECIATION => [
-                'root_category' => 'expenses',
-                'sub_category' => 'indirect_expenses',
-            ],
-
-            default => throw new InvalidArgumentException('نوع الحساب غير صحيح.'),
-        };
+        return $parent;
     }
 
-  private function resolveParentId(int $companyId, string $rootCategory, ?string $subCategory): ?int
-{
-    $map = [
-        'current_assets' => '1100',
-        'fixed_assets' => '1200',
-        'investment' => '1300',
-        'temporary_accounts' => '1400',
+    private function findSelectedParent(
+        int $companyId,
+        int $parentId,
+        string $accountType,
+        string $rootCategory,
+        string $subCategory
+    ): ChartOfAccount {
+        $parent = ChartOfAccount::query()
+            ->where('company_id', $companyId)
+            ->where('id', $parentId)
+            ->where('account_level', 'parent')
+            ->where('root_category', $rootCategory)
+            ->where('sub_category', $subCategory)
+            ->first();
 
-        'current_liabilities' => '2100',
-        'non_current_liabilities' => '2200',
+        if (! $parent) {
+            throw new InvalidArgumentException('The selected parent account is not valid.');
+        }
 
-        'capital_stock' => '3100',
-        'retained_earnings' => '3200',
-        'opening_balance_equity' => '3300',
-        'dividends_paid' => '3400',
-        'revaluation_surplus' => '3500',
+        if ($accountType !== AccountTypes::OTHER && $parent->account_type !== $accountType) {
+            throw new InvalidArgumentException('The selected parent account must be of the same type.');
+        }
 
-        'direct_income' => '4100',
-        'indirect_income' => '4200',
-
-        'direct_expenses' => '5100',
-        'indirect_expenses' => '5200',
-    ];
-
-    if (!$subCategory || !isset($map[$subCategory])) {
-        return null;
+        return $parent;
     }
-
-    return ChartOfAccount::query()
-        ->where('company_id', $companyId)
-        ->where('account_number', $map[$subCategory])
-        ->where('is_system', true)
-        ->value('id');
-}
 }

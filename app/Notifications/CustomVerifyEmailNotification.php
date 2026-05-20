@@ -32,4 +32,5 @@ class CustomVerifyEmailNotification extends VerifyEmail
                 'verificationUrl' => $verificationUrl,
             ]);
     }
+    
 }

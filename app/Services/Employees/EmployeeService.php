@@ -9,24 +9,32 @@ class EmployeeService
     {
         $query = Employee::with(['company', 'department', 'shifts', 'educations']);
 
-        // search
+        //search
         if (!empty($filters['search'])) {
             $search = $filters['search'];
 
             $query->where(function ($q) use ($search) {
                 $q->where('full_name', 'like', "%{$search}%")
-                  ->orWhere('national_id', 'like', "%{$search}%")
-                  ->orWhere('mobile_number', 'like', "%{$search}%")
-                  ->orWhere('company_email', 'like', "%{$search}%");
+                  ->orWhere('national_id', 'like', "%{$search}%");
             });
         }
-
-        // filters
+        //filters
         if (!empty($filters['department_id'])) {
             $query->where('department_id', $filters['department_id']);
         }
+         if (!empty($filters['gender'])) {
+            $query->where('gender', $filters['gender']);
+        }
+         if (!empty($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
 
 
+        if (!empty($filters['shift_id'])) {
+    $query->whereHas('shifts', function ($q) use ($filters) {
+        $q->where('shifts.id', $filters['shift_id']);
+    });
+}
         // soft delete
         if (($filters['trashed'] ?? null) === 'with') {
             $query->withTrashed();
@@ -65,14 +73,13 @@ class EmployeeService
             'series' => $series,
         ]);
 
-        if (!empty($data['shifts'])) {
-            foreach ($data['shifts'] as $i => $shift) {
-                $employee->shifts()->create([
-                    ...$shift,
-                    'is_default' => $i === 0,
-                ]);
-            }
-        }
+       if (!empty($data['shift_ids'])) {
+    foreach ($data['shift_ids'] as $i => $shiftId) {
+        $employee->shifts()->attach($shiftId, [
+            'is_default' => $i === 0,
+        ]);
+    }
+}
 
         if (!empty($data['educations'])) {
             foreach ($data['educations'] as $edu) {
@@ -88,16 +95,17 @@ public function update(Employee $employee, array $data): Employee
     return DB::transaction(function () use ($employee, $data) {
         $employee->update($data);
 
-        if (isset($data['shifts'])) {
-            $employee->shifts()->delete();
+      if (isset($data['shift_ids'])) {
+    $syncData = [];
 
-            foreach ($data['shifts'] as $i => $shift) {
-                $employee->shifts()->create([
-                    ...$shift,
-                    'is_default' => $i === 0,
-                ]);
-            }
-        }
+    foreach ($data['shift_ids'] as $i => $shiftId) {
+        $syncData[$shiftId] = [
+            'is_default' => $i === 0,
+        ];
+    }
+
+    $employee->shifts()->sync($syncData);
+}
 
         if (isset($data['educations'])) {
             $employee->educations()->delete();

@@ -6,26 +6,38 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('purchase_receipt_items', function (Blueprint $table) {
-    $table->id();
+            $table->id();
 
-    $table->foreignId('purchase_receipt_id')->constrained()->cascadeOnDelete();
-    $table->foreignId('item_id')->constrained()->noActionOnDelete();
+            $table->foreignId('purchase_receipt_id')
+                ->constrained('purchase_receipts')
+                ->cascadeOnDelete();
 
-    $table->decimal('quantity', 18, 2);
+            $table->foreignId('purchase_order_item_id')
+                ->nullable()
+                ->constrained('purchase_order_items')
+                ->noActionOnDelete();
 
-    $table->timestamps();
-});
+            $table->foreignId('item_id')
+                ->constrained('items')
+                ->noActionOnDelete();
+
+            $table->foreignId('warehouse_id')
+                ->constrained('warehouses')
+                ->noActionOnDelete();
+
+            $table->decimal('quantity', 18, 2);
+
+            $table->timestamps();
+
+            $table->index(['purchase_receipt_id', 'item_id']);
+            $table->index(['purchase_order_item_id']);
+            $table->index(['warehouse_id']);
+        });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('purchase_receipt_items');

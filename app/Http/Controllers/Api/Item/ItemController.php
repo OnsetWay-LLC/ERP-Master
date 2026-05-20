@@ -79,6 +79,14 @@ class ItemController extends Controller
             'message' => 'Item deleted successfully.',
         ]);
     }
+    public function restore(Item $item): JsonResponse
+    {
+        $this->service->restore($item);
+
+        return response()->json([
+            'message' => 'Item restored successfully.',
+        ]);
+    }
     public function printBarcode(int $id)
 {
     return $this->service->printBarcode($id);

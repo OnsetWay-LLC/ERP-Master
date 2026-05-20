@@ -11,7 +11,7 @@ class ItemsExport implements FromCollection, WithHeadings
     public function collection()
     {
         return Item::query()
-            ->with('itemGroup.warehouse')
+            ->with('itemGroup')
             ->get()
             ->map(function ($item) {
                 return [
@@ -24,7 +24,7 @@ class ItemsExport implements FromCollection, WithHeadings
                     'currency_code' => $item->currency_code,
                     'status' => $item->status,
                     'item_group' => $item->itemGroup?->name_en,
-                    'warehouse' => $item->itemGroup?->warehouse?->name_en,
+                   
                 ];
             });
     }
@@ -41,7 +41,7 @@ class ItemsExport implements FromCollection, WithHeadings
             'Currency',
             'Status',
             'Item Group',
-            'Warehouse',
+           
         ];
     }
 }

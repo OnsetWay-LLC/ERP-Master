@@ -42,7 +42,7 @@ class UpdateItemRequest extends FormRequest
                     ->ignore($item->id)
                     ->whereNull('deleted_at'),
             ],
-
+            
             'selling_price' => ['sometimes', 'required', 'numeric', 'min:0'],
             'purchase_price' => ['sometimes', 'required', 'numeric', 'min:0'],
 

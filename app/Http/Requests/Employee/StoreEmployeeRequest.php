@@ -28,10 +28,9 @@ class StoreEmployeeRequest extends FormRequest
         'salary_value' => ['required', 'numeric', 'min:0'],
         'marital_status' => ['nullable', 'in:single,married'],
 
-        'shifts' => ['nullable', 'array'],
-        'shifts.*.shift_type_name' => ['required_with:shifts'],
-        'shifts.*.start_time' => ['required_with:shifts'],
-        'shifts.*.end_time' => ['required_with:shifts'],
+       'shift_ids' => ['nullable', 'array'],
+'shift_ids.*' => ['integer', 'exists:shifts,id'],
+        
 
         'educations' => ['nullable', 'array'],
         'educations.*.school_university' => ['required_with:educations'],

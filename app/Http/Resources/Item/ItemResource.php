@@ -28,12 +28,7 @@ class ItemResource extends JsonResource
                 'name_en' => $this->itemGroup?->name_en,
             ],
 
-            'warehouse' => [
-                'id' => $this->itemGroup?->warehouse?->id,
-                'name_ar' => $this->itemGroup?->warehouse?->name_ar,
-                'name_en' => $this->itemGroup?->warehouse?->name_en,
-            ],
-
+          
             'created_by' => [
                 'id' => $this->creator?->id,
                 'name' => $this->creator?->name,

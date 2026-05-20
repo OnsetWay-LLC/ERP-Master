@@ -65,4 +65,12 @@ class SupplierService
     {
         $supplier->delete();
     }
+    public function restore(Supplier $supplier): void
+    {
+        if (!$supplier->trashed()) {
+            abort(400, 'Supplier is not deleted.');
+        }
+
+        $supplier->restore();   
+}
 }

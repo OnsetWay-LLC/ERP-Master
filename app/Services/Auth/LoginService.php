@@ -3,7 +3,6 @@
 namespace App\Services\Auth;
 
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
@@ -11,42 +10,32 @@ class LoginService
 {
     public function login(array $data): array
     {
-        $user = User::where('username', $data['username'])->first();
+        $login = $data['login'];
 
-        // ❌ المستخدم غير موجود
+        $user = User::where('username', $login)
+            ->orWhere('email', $login)
+            ->first();
+
         if (! $user) {
-            abort(401, 'Invalid username or password.');
+            abort(401, 'Invalid email/username or password.');
         }
 
-        // ❌ الحساب غير مفعل
         if (! $user->is_active) {
             abort(403, 'Your account is inactive.');
         }
 
-        // ❌ الحساب مقفول
         if ($user->locked_until && now()->lessThan($user->locked_until)) {
             abort(403, 'Your account is locked. Try again after 5 minutes.');
         }
 
-        // ❌ كلمة المرور غلط
         if (! Hash::check($data['password'], $user->password)) {
-
             $this->handleFailedLogin($user);
 
-            abort(401, 'Invalid username or password.');
-        }
-    
-         
-
-        // ❌ الإيميل غير مفعل
-        if (! $user->hasVerifiedEmail()) {
-            abort(403, 'Please verify your email first.');
+            abort(401, 'Invalid email/username or password.');
         }
 
-        // ✅ تسجيل دخول ناجح
         $this->resetLoginAttempts($user);
 
-        // 🎟️ JWT Token
         $token = JWTAuth::fromUser($user);
 
         return [

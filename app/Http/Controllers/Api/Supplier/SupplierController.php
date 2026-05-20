@@ -48,4 +48,12 @@ class SupplierController extends Controller
             'message' => 'Deleted successfully'
         ]);
     }
+    public function restore(Supplier $supplier)
+    {
+        $this->service->restore($supplier);
+
+        return response()->json([
+            'message' => 'Restored successfully'
+        ]);
+    }
 }

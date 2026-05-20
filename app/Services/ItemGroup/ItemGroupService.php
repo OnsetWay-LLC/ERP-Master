@@ -11,7 +11,7 @@ class ItemGroupService
     public function getAll(array $filters): LengthAwarePaginator
     {
         $query = ItemGroup::query()
-            ->with(['company', 'warehouse', 'creator']);
+            ->with(['company',  'creator']);
 
         if (!empty($filters['search'])) {
             $search = $filters['search'];
@@ -19,16 +19,11 @@ class ItemGroupService
             $query->where(function ($q) use ($search) {
                 $q->where('name_ar', 'like', "%{$search}%")
                     ->orWhere('name_en', 'like', "%{$search}%")
-                    ->orWhereHas('warehouse', function ($warehouseQuery) use ($search) {
-                        $warehouseQuery->where('name_ar', 'like', "%{$search}%")
-                            ->orWhere('name_en', 'like', "%{$search}%");
-                    });
+            ; 
             });
         }
 
-        if (!empty($filters['warehouse_id'])) {
-            $query->where('warehouse_id', $filters['warehouse_id']);
-        }
+      
 
         if (($filters['trashed'] ?? null) === 'with') {
             $query->withTrashed();
@@ -47,7 +42,7 @@ class ItemGroupService
     public function getById(int $id): ItemGroup
     {
         return ItemGroup::query()
-            ->with(['company', 'warehouse', 'creator'])
+            ->with(['company',  'creator'])
             ->findOrFail($id);
     }
 
@@ -58,18 +53,28 @@ class ItemGroupService
         $data['company_id'] = $company->id;
         $data['created_by'] = auth('api')->id();
 
-        return ItemGroup::create($data)->load(['company', 'warehouse', 'creator']);
+        return ItemGroup::create($data)->load(['company',  'creator']);
     }
 
     public function update(ItemGroup $itemGroup, array $data): ItemGroup
     {
         $itemGroup->update($data);
 
-        return $itemGroup->fresh()->load(['company', 'warehouse', 'creator']);
+        return $itemGroup->fresh()->load(['company',  'creator']);
     }
 
     public function delete(ItemGroup $itemGroup): void
     {
         $itemGroup->delete();
     }
+  public function restore(ItemGroup $itemGroup): void
+{
+    if (!$itemGroup->trashed()) {
+        abort(400, 'Item group is not deleted.');
+    }
+
+    $itemGroup->restore();
 }
+}
+
+

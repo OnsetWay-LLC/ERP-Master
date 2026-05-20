@@ -8,25 +8,25 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('banks', function (Blueprint $table) {
-            $table->id();
+      Schema::create('banks', function (Blueprint $table) {
+    $table->id();
 
-            $table->foreignId('company_id')
-                ->constrained('companies')
-                ->cascadeOnDelete();
+    $table->foreignId('company_id')
+        ->constrained('companies')
+        ->cascadeOnDelete();
 
-            $table->string('name');
+$table->string('name_ar');
+$table->string('name_en');
+    $table->foreignId('created_by')
+        ->nullable()
+        ->constrained('users')
+        ->noActionOnDelete();
 
-            $table->foreignId('created_by')
-                ->nullable()
-                ->constrained('users')
-                ->noActionOnDelete();
+    $table->timestamps();
+    $table->softDeletes();
 
-            $table->timestamps();
-            $table->softDeletes();
-
-            $table->unique(['company_id', 'name']);
-        });
+$table->unique(['company_id', 'name_ar', 'deleted_at'], 'banks_company_name_ar_deleted_unique');
+$table->unique(['company_id', 'name_en', 'deleted_at'], 'banks_company_name_en_deleted_unique');});
     }
 
     public function down(): void

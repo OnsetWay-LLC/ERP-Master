@@ -80,4 +80,12 @@ class CustomerService
     {
         $customer->delete();
     }
+    public function restore(Customer $customer): void
+    {
+        if (!$customer->trashed()) {
+            abort(400, 'Customer is not deleted.');
+        }
+
+        $customer->restore();   
+}
 }
