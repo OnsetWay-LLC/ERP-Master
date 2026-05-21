@@ -17,12 +17,19 @@ class UpdateShiftRequest extends FormRequest
         $shiftId = $this->route('shift')?->id;
 
         return [
-            'name' => [
+            'name_ar' => [
                 'sometimes',
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('shifts', 'name')->ignore($shiftId),
+                Rule::unique('shifts', 'name_ar')->ignore($shiftId),
+            ],
+            'name_en' => [
+                'sometimes',
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('shifts', 'name_en')->ignore($shiftId),
             ],
             'start_time' => ['sometimes', 'required', 'date_format:H:i'],
             'end_time' => ['sometimes', 'required', 'date_format:H:i'],

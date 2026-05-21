@@ -10,7 +10,6 @@ use App\Models\Company;
 use App\Services\Company\CompanyService;
 use Illuminate\Http\JsonResponse;
 
-
 class CompanyController extends Controller
 {
     public function __construct(
@@ -57,10 +56,10 @@ class CompanyController extends Controller
         ]);
     }
 
-   public function countries()
-{
-    return response()->json([
-        'data' => config('company.countries')
-    ]);
-}
+    public function countries(): JsonResponse
+    {
+        return response()->json([
+            'data' => config('company.countries'),
+        ]);
+    }
 }

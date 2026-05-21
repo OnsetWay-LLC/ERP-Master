@@ -16,7 +16,8 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->string('series')->unique();
-            $table->string('full_name');
+            $table->string('full_name_ar');
+            $table->string('full_name_en')->nullable();
             $table->string('national_id')->unique();
 
             $table->enum('gender', ['male', 'female']);
@@ -27,24 +28,22 @@ return new class extends Migration
                 ->default('active');
 
            $table->foreignId('department_id')
-    ->nullable()
-    ->constrained('departments')
-    ->noActionOnDelete();
+            ->nullable()
+            ->constrained('departments')
+            ->noActionOnDelete();
 
-            $table->string('mobile_number')->nullable();
-            $table->string('company_email')->nullable();
-            $table->text('address')->nullable();
+             $table->string('mobile_number')->nullable();
+             $table->string('company_email')->nullable();
+             $table->text('address')->nullable();
 
-            $table->enum('salary_mode', ['bank_transfer', 'cash', 'cheques'])
+            
+
+             $table->enum('marital_status', ['single', 'married'])
                 ->nullable();
-                 $table->decimal('salary_value', 15, 2)
-                ->nullable();
-
-            $table->enum('marital_status', ['single', 'married'])
-                ->nullable();
-
-            $table->timestamps();
-            $table->softDeletes();
+             $table->string('job_title')->nullable(); 
+             $table->enum('wife_working_status', ['working', 'not_working']) ->nullable();
+             $table->timestamps();
+             $table->softDeletes();
         });
     }
 
@@ -52,4 +51,5 @@ return new class extends Migration
     {
         Schema::dropIfExists('employees');
     }
+
 };

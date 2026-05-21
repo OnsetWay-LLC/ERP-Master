@@ -15,12 +15,15 @@ return new class extends Migration
                 ->constrained('employees')
                 ->cascadeOnDelete();
 
-            $table->string('school_university');
-            $table->string('qualification');
+            $table->string('school_university_ar')->nullable();
+$table->string('school_university_en')->nullable();
+            $table->string('qualification_ar')->nullable();
+$table->string('qualification_en')->nullable();
             $table->string('level'); // graduation, post_graduation, under_graduation
             $table->string('year_of_passing')->nullable();
             $table->string('class_percentage')->nullable();
-            $table->string('major_optional_subject')->nullable();
+            $table->string('major_ar')->nullable();
+$table->string('major_en')->nullable();
 
             $table->timestamps();
         });

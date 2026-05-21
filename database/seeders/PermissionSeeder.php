@@ -49,7 +49,8 @@ class PermissionSeeder extends Seeder
             'screen.suppliers',
             'screen.purchase_orders',
             'screen.purchase_invoices',
-
+            'screen.vacations',
+            'screen.payroll_tax_settings',
             'screen.warehouses',
             'screen.item_groups',
             'screen.items',

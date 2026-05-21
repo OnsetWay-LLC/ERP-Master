@@ -27,7 +27,8 @@ class RolePermissionSeeder extends Seeder
             'screen.users',
             'screen.employees',
             'screen.shifts',
-
+            'screen.vacations',
+            'screen.payroll_tax_settings',
             'screen.chart_of_accounts',
             'screen.default_accounts',
            'screen.journal_entries.view',
@@ -80,6 +81,7 @@ class RolePermissionSeeder extends Seeder
             'screen.balance_sheet',
             'screen.profit_and_loss',
             'screen.tax',
+            'screen.payroll_tax_settings',
             'screen.fees_templates',
             'screen.assets',
             'screen.asset_items',
@@ -89,6 +91,7 @@ class RolePermissionSeeder extends Seeder
             'screen.bank_reconciliation',
             'screen.sales_invoices',
             'screen.purchase_invoices',
+            'screen.vacations',
             
         ]);
 
@@ -127,6 +130,7 @@ class RolePermissionSeeder extends Seeder
 
         $hr->syncPermissions([
             'screen.employees',
+            'screen.vacations'
         ]);
     }
 }

@@ -32,6 +32,8 @@ use App\Http\Controllers\Api\Accounting\GeneralLedgerController;
 use App\Http\Controllers\Api\BankReconciliation\BankReconciliationController;
 use App\Http\Controllers\Api\Reports\TrialBalanceController;
 use App\Http\Controllers\Api\Reports\ProfitLossController;
+use App\Http\Controllers\Api\PayrollTaxSetting\PayrollTaxSettingController;
+use App\Http\Controllers\Api\EmployeeLeave\EmployeeLeaveController;
 
 use Illuminate\Support\Facades\Route;
 
@@ -48,16 +50,23 @@ Route::prefix('auth')->group(function () {
     Route::post('/forgot-password/send-code', [PasswordController::class, 'forgotPassword']);
     Route::post('/reset-password', [PasswordController::class, 'resetPassword']);
 });
-Route::prefix('companies')
-    ->middleware(['auth:api', 'permission:screen.company,api', 'locale'])
+//companies routes
+Route::middleware(['auth:api', 'permission:screen.company,api', 'locale'])
     ->group(function () {
-        Route::get('/', [CompanyController::class, 'index']);
-        Route::post('/', [CompanyController::class, 'store']);
-        Route::get('/{company}', [CompanyController::class, 'show']);
-        Route::put('/{company}', [CompanyController::class, 'update']);
-   Route::get('/lookups/countries', [CompanyController::class, 'countries']);
 
+        Route::get('/companies/lookups/countries', [CompanyController::class, 'countries']);
+
+        Route::apiResource('/companies', CompanyController::class)
+            ->except(['destroy']);
     });
+
+Route::prefix('payroll-tax-settings')
+    ->middleware(['auth:api', 'permission:screen.payroll_tax_settings,api', 'locale'])
+    ->group(function () {
+        Route::get('/', [PayrollTaxSettingController::class, 'show']);
+        Route::post('/', [PayrollTaxSettingController::class, 'storeOrUpdate']);
+    });
+    
   Route::prefix('departments')
     ->middleware(['auth:api', 'permission:screen.departments,api', 'locale'])
     ->group(function () {
@@ -75,6 +84,17 @@ Route::prefix('companies')
         Route::get('/{employee}', [EmployeeController::class, 'show']);
         Route::put('/{employee}', [EmployeeController::class, 'update']);
         Route::delete('/{employee}', [EmployeeController::class, 'destroy']);
+        Route::post('/{employee}/restore', [EmployeeController::class, 'restore'])->withTrashed();
+    });
+   Route::prefix('employee-leaves')
+    ->middleware(['auth:api', 'permission:screen.employees,api', 'locale'])
+    ->group(function () {
+      Route::get('/employees/search', [EmployeeLeaveController::class, 'searchEmployees']);
+Route::get('/employees/{employee}/leave-options', [EmployeeLeaveController::class, 'leaveOptions']);
+
+Route::get('/', [EmployeeLeaveController::class, 'index']);
+Route::post('/', [EmployeeLeaveController::class, 'store']);
+Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
     });
    Route::prefix('users')
     ->middleware(['auth:api', 'permission:screen.users,api', 'locale'])

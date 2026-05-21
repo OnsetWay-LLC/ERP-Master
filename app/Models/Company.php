@@ -20,6 +20,10 @@ class Company extends Model
         'email',
     ];
 
+    protected $casts = [
+        'established_at' => 'date',
+    ];
+
     public function departments()
     {
         return $this->hasMany(Department::class);
@@ -30,8 +34,27 @@ class Company extends Model
         return $this->hasMany(Employee::class);
     }
 
+    public function workingDays()
+    {
+        return $this->hasMany(CompanyWorkingDay::class);
+    }
+
+    public function shifts()
+    {
+        return $this->hasMany(Shift::class);
+    }
+
+    public function payrolls()
+    {
+        return $this->hasMany(Payroll::class);
+    }
+
     public function users()
     {
         return $this->hasManyThrough(User::class, Employee::class);
-    } //يسمح لنا بالحصول على جميع المستخدمين المرتبطين بالشركة من خلال الموظفين.
+    }
+    public function leaveTypes()
+{
+    return $this->hasMany(LeaveType::class);
+}
 }
