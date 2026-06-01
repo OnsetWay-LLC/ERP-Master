@@ -9,13 +9,8 @@ class JournalEntryLine extends Model
 //كل سطر = حساب + مبلغ
 //debit أو credit
 {
-    protected $fillable = [
-        'company_id',
-        'journal_entry_id',
-        'account_id',
-        'debit',
-        'credit',
-        'note',
+   protected $fillable = [
+        'company_id', 'journal_entry_id', 'account_id', 'debit', 'credit', 'note'
     ];
    public function journalEntry(): BelongsTo
     {

@@ -9,36 +9,37 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('warehouse_stocks', function (Blueprint $table) {
-            $table->id();
+    $table->id();
 
-            $table->foreignId('company_id')
-                ->constrained('companies')
-                ->cascadeOnDelete();
+    $table->foreignId('company_id')
+        ->constrained('companies')
+        ->noActionOnDelete();
 
-            $table->foreignId('item_id')
-                ->constrained('items')
-                ->noActionOnDelete();
+    $table->foreignId('item_id')
+        ->constrained('items')
+        ->noActionOnDelete();
 
-            $table->foreignId('warehouse_id')
-                ->constrained('warehouses')
-                ->noActionOnDelete();
+    $table->foreignId('warehouse_id')
+        ->constrained('warehouses')
+        ->noActionOnDelete();
 
-            $table->decimal('quantity', 18, 2)->default(0);
+    $table->decimal('quantity', 18, 2)->default(0);
 
-            $table->decimal('average_rate', 18, 2)->default(0);
+    $table->decimal('reserved_quantity', 18, 2)->default(0);
 
-            $table->decimal('stock_value', 18, 2)->default(0);
+    $table->decimal('average_rate', 18, 2)->default(0);
+    $table->decimal('stock_value', 18, 2)->default(0);
 
-            $table->timestamps();
+    $table->timestamps();
 
-            $table->unique(
-                ['company_id', 'item_id', 'warehouse_id'],
-                'warehouse_stocks_unique'
-            );
+    $table->unique(
+        ['company_id', 'item_id', 'warehouse_id'],
+        'warehouse_stocks_unique'
+    );
 
-            $table->index(['company_id', 'warehouse_id']);
-            $table->index(['company_id', 'item_id']);
-        });
+    $table->index(['company_id', 'warehouse_id']);
+    $table->index(['company_id', 'item_id']);
+});
     }
 
     public function down(): void

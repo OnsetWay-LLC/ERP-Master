@@ -16,6 +16,7 @@ class IndexCustomerRequest extends FormRequest
         return [
             'search' => ['nullable', 'string', 'max:255'],
             'customer_type' => ['nullable', 'in:company,individual'],
+            'opening_balance' => ['nullable', 'numeric', 'min:0'],
             'country' => [
                 'nullable',
                 'string',

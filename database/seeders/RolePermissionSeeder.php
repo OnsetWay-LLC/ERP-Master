@@ -49,7 +49,7 @@ class RolePermissionSeeder extends Seeder
             'screen.bank',
             'screen.bank_accounts',
             'screen.bank_reconciliation',
-
+            'screen.discount_settings',
             'screen.customers',
             'screen.sales_orders',
             'screen.sales_invoices',

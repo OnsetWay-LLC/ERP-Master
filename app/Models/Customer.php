@@ -22,6 +22,7 @@ class Customer extends Model
         'zip_code',
         'state_province',
         'country',
+        'opening_balance',
         'created_by',
     ];
 

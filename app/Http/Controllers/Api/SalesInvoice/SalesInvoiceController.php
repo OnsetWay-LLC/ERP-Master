@@ -1,0 +1,140 @@
+<?php
+
+namespace App\Http\Controllers\Api\SalesInvoice;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\SalesInvoice\StoreSalesInvoiceRequest;
+use App\Http\Requests\SalesInvoice\UpdateSalesInvoiceRequest;
+use App\Models\SalesInvoice;
+use App\Services\SalesInvoice\SalesInvoiceService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use NumberToWords\NumberToWords;
+use Mpdf\Mpdf;
+
+class SalesInvoiceController extends Controller
+{
+    public function __construct(private readonly SalesInvoiceService $service) {}
+
+    public function store(StoreSalesInvoiceRequest $request): JsonResponse
+    {
+        $invoice = $this->service->create($request->validated());
+
+        return response()->json([
+            'message' => 'Sales invoice created successfully as draft.',
+            'data'    => $invoice
+        ], 201);
+    }
+public function update(UpdateSalesInvoiceRequest $request, SalesInvoice $salesInvoice): JsonResponse
+    {
+        $invoice = $this->service->update($salesInvoice, $request->validated());
+
+        return response()->json([
+            'message' => 'Sales invoice updated successfully.',
+            'data' => $invoice
+        ]);
+    }
+    public function submit(SalesInvoice $salesInvoice): JsonResponse
+    {
+        $invoice = $this->service->submit($salesInvoice);
+
+        return response()->json([
+            'message' => 'Sales invoice posted and submitted to general ledger successfully.',
+            'data'    => $invoice
+        ]);
+    }
+
+    public function printPreview(SalesInvoice $salesInvoice): JsonResponse
+    {
+        $salesInvoice->load(['customer', 'items', 'taxes', 'fees']);
+
+        $numberToWords = new NumberToWords();
+        $transformer   = $numberToWords->getNumberTransformer('en');
+        $amountInWords = strtoupper($transformer->toWords((int)$salesInvoice->grand_total)) . ' JOD ONLY';
+
+        return response()->json([
+            'invoice'         => $salesInvoice,
+            'amount_in_words' => $amountInWords
+        ]);
+    }
+
+    public function showHtml(SalesInvoice $salesInvoice, Request $request)
+    {
+      $salesInvoice->load([
+    'company',
+    'customer',
+    'items.item',
+    'taxes',
+    'fees'
+]);
+
+        $locale = $request->query('locale') 
+       ?? $request->getPreferredLanguage(['ar', 'en', 'both']) 
+       ?? 'both';
+
+        $numberToWords = new NumberToWords();
+        $transformer   = $numberToWords->getNumberTransformer('en');
+        $amountInWords = strtoupper($transformer->toWords((int)$salesInvoice->grand_total)) . ' JOD ONLY';
+
+        return view('invoices.template', [
+            'invoice'       => $salesInvoice,
+            'amountInWords' => $amountInWords,
+            'locale'        => $locale,
+        ]);
+    }
+
+    public function downloadPdf(SalesInvoice $salesInvoice, Request $request): Response
+    {
+       $salesInvoice->load([
+    'company',
+    'customer',
+    'items.item',
+    'taxes',
+    'fees'
+]);
+
+    // اقرأ من query string أولاً، وإذا مش موجود اقرأ من الـ header
+    $locale = $request->query('locale') 
+           ?? $request->getPreferredLanguage(['ar', 'en', 'both']) 
+           ?? 'both';
+
+        // NumberToWords وليس Mpdf
+        $numberToWords = new NumberToWords();
+        $transformer   = $numberToWords->getNumberTransformer('en');
+        $amountInWords = strtoupper($transformer->toWords((int)$salesInvoice->grand_total)) . ' JOD ONLY';
+
+        // توليد HTML من الـ blade
+        $html = view('invoices.template', [
+            'invoice'       => $salesInvoice,
+            'amountInWords' => $amountInWords,
+            'locale'        => $locale,
+        ])->render();
+
+        // إنشاء PDF عبر mPDF
+        $mpdf = new Mpdf([
+            'mode'        => 'utf-8',
+            'format'      => 'A4',
+            'orientation' => 'P',
+            'direction'   => $locale === 'en' ? 'ltr' : 'rtl',
+        ]);
+
+        $mpdf->WriteHTML($html);
+
+        $filename = $salesInvoice->invoice_number . '.pdf';
+
+        // D = تحميل مباشر، اكتب I بدلها لو تريد يفتح في المتصفح
+        return response($mpdf->Output($filename, 'S'), 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+    public function destroy(SalesInvoice $salesInvoice): JsonResponse
+    {
+        $this->service->delete($salesInvoice);
+
+        return response()->json([
+            'message' => 'Sales invoice deleted successfully.'
+        ]);
+    }
+}

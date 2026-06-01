@@ -32,7 +32,15 @@ class Item extends Model
     {
         return $this->belongsTo(ItemGroup::class);
     }
+public function warehouseStocks()
+{
+    return $this->hasMany(WarehouseStock::class);
+}
 
+public function salesOrderItems()
+{
+    return $this->hasMany(SalesOrderItem::class);
+}
 
     public function creator()
     {

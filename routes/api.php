@@ -34,7 +34,9 @@ use App\Http\Controllers\Api\Reports\TrialBalanceController;
 use App\Http\Controllers\Api\Reports\ProfitLossController;
 use App\Http\Controllers\Api\PayrollTaxSetting\PayrollTaxSettingController;
 use App\Http\Controllers\Api\EmployeeLeave\EmployeeLeaveController;
-
+use App\Http\Controllers\Api\SalesOrder\SalesOrderController;
+use App\Http\Controllers\Api\SalesInvoice\SalesInvoiceController;
+use App\Http\Controllers\Api\DiscountSetting\DiscountSettingController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -311,4 +313,41 @@ Route::middleware(['auth:api', 'permission:screen.trial_balance', 'locale'])->gr
 Route::middleware(['auth:api', 'permission:screen.profit_and_loss', 'locale'])->group(function () {
     Route::get('/reports/profit-loss', [ProfitLossController::class, 'report']);
     Route::get('/reports/profit-loss/pdf', [ProfitLossController::class, 'exportPdf']);
+});
+Route::prefix('sales-orders')
+    ->middleware(['auth:api', 'permission:screen.sales_orders,api', 'locale'])
+    ->group(function () {
+        Route::get('/', [SalesOrderController::class, 'index']);
+    Route::post('/', [SalesOrderController::class, 'store']);
+    Route::get('/{salesOrder}', [SalesOrderController::class, 'show']);
+    Route::put('/{salesOrder}', [SalesOrderController::class, 'update']);
+    Route::delete('/{salesOrder}', [SalesOrderController::class, 'destroy']);
+    Route::post('/{salesOrder}/submit', [SalesOrderController::class, 'submit']);// Draft -> Confirmed
+    Route::post('/{salesOrder}/process', [SalesOrderController::class, 'process']);// Confirmed -> In Process
+    Route::post('/{salesOrder}/transit', [SalesOrderController::class, 'transit']);// In Process -> In Transit
+    Route::post('/{salesOrder}/deliver', [SalesOrderController::class, 'deliver']);// In Transit -> Delivered
+    Route::post('/{salesOrder}/cancel', [SalesOrderController::class, 'cancel']);
+    });
+
+  Route::prefix('sales-invoices')
+    ->middleware(['auth:api', 'permission:screen.sales_invoices,api', 'locale'])
+    ->group(function () {
+        Route::post('/', [SalesInvoiceController::class, 'store']); // حفظ الفاتورة مسودة (Draft)
+        Route::put('/{salesInvoice}', [SalesInvoiceController::class, 'update']);
+        Route::post('/{salesInvoice}/submit', [SalesInvoiceController::class, 'submit']); // الاعتماد النهائي والترحيل المحاسبي والمالي
+        Route::get('/{salesInvoice}/print-preview', [SalesInvoiceController::class, 'printPreview']); // معاينة الطباعة والتفقيط النصي
+        
+        // تم إزالة كلمة sales-invoices من هنا لأن الـ prefix يقوم بالمهمة
+        Route::get('/{salesInvoice}/preview', [SalesInvoiceController::class, 'showHtml']);
+        Route::get('/{salesInvoice}/pdf', [SalesInvoiceController::class, 'downloadPdf']);
+              Route::delete('/{salesInvoice}', [SalesInvoiceController::class, 'destroy']);
+
+    });
+    Route::middleware([ 'auth:api', 'permission:screen.discount_settings', 'locale'])
+    ->prefix('discount-settings')->group(function () {
+    Route::post('/', [DiscountSettingController::class, 'store']);
+    Route::get('/', [DiscountSettingController::class, 'show']);
+    Route::put('/{discountSetting}', [DiscountSettingController::class, 'update']);
+    Route::delete('/{discountSetting}', [DiscountSettingController::class, 'destroy']);
+
 });

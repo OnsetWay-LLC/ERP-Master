@@ -40,7 +40,7 @@ class PermissionSeeder extends Seeder
             'screen.bank',
             'screen.bank_accounts',
             'screen.shifts',
-
+            'screen.discount_settings',
             'screen.customers',
             'screen.sales_orders',
             'screen.purchase_receipts',

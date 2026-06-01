@@ -28,7 +28,7 @@ return new class extends Migration
             $table->string('zip_code')->nullable();
             $table->string('state_province')->nullable();
             $table->string('country')->nullable();
-
+            $table->decimal('opening_balance', 15, 2)->default(0);
             $table->foreignId('created_by')
                 ->nullable()
                 ->constrained('users')

@@ -15,7 +15,10 @@ return new class extends Migration
                 ->constrained('tax_templates')
                 ->cascadeOnDelete();
 
-            $table->string('type'); // actual, on_net_total
+            $table->enum('type', [
+                'actual',
+                'on_net_total',
+            ]);
 
             $table->foreignId('account_id')
                 ->constrained('chart_of_accounts')

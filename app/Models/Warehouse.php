@@ -20,7 +20,10 @@ class Warehouse extends Model
     {
         return $this->belongsTo(Company::class);
     }
-
+public function stocks()
+    {
+        return $this->hasMany(WarehouseStock::class);
+    }
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

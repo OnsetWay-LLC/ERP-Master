@@ -27,6 +27,7 @@ class CustomerResource extends JsonResource
             'zip_code' => $this->zip_code,
             'state_province' => $this->state_province,
             'country' => $this->country,
+            'opening_balance' => $this->opening_balance,
 
             'company' => [
                 'id' => $this->company?->id,

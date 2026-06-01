@@ -24,4 +24,8 @@ class TaxTemplate extends Model
     {
         return $this->hasMany(TaxTemplateLine::class);
     }
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }

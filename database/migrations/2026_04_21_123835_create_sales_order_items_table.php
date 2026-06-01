@@ -14,14 +14,34 @@ return new class extends Migration
         Schema::create('sales_order_items', function (Blueprint $table) {
     $table->id();
 
-    $table->foreignId('sales_order_id')->constrained()->cascadeOnDelete();
-    $table->foreignId('item_id')->constrained()->noActionOnDelete();
+    $table->foreignId('sales_order_id')
+        ->constrained('sales_orders')
+        ->cascadeOnDelete();
+
+    $table->foreignId('item_id')
+        ->constrained('items')
+        ->noActionOnDelete();
+
+    $table->foreignId('warehouse_id')
+        ->constrained('warehouses')
+        ->noActionOnDelete();
+
+    // Snapshot
+    $table->string('item_code')->nullable();
+    $table->string('item_name_ar')->nullable();
+    $table->string('item_name_en')->nullable();
+
+    $table->decimal('available_stock', 18, 2)->default(0);
 
     $table->decimal('quantity', 18, 2);
     $table->decimal('rate', 18, 2);
     $table->decimal('amount', 18, 2);
 
     $table->timestamps();
+
+    $table->index(['sales_order_id']);
+    $table->index(['item_id']);
+    $table->index(['warehouse_id']);
 });
     }
 

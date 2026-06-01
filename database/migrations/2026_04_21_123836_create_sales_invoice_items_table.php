@@ -11,18 +11,20 @@ return new class extends Migration
      */
     public function up(): void
     {
-       Schema::create('sales_invoice_items', function (Blueprint $table) {
-    $table->id();
-
-    $table->foreignId('sales_invoice_id')->constrained()->cascadeOnDelete();
-    $table->foreignId('item_id')->constrained()->noActionOnDelete();
-
-    $table->decimal('quantity', 18, 2);
-    $table->decimal('rate', 18, 2);
-    $table->decimal('amount', 18, 2);
-
-    $table->timestamps();
-});
+      // 2. جدول أصناف الفاتورة
+        Schema::create('sales_invoice_items', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('sales_invoice_id')->constrained('sales_invoices')->cascadeOnDelete();
+            $table->foreignId('item_id')->constrained('items');
+            $table->foreignId('warehouse_id')->constrained('warehouses');
+            $table->string('item_code');
+            $table->string('item_name_ar');
+            $table->string('item_name_en');
+            $table->decimal('quantity', 15, 2);
+            $table->decimal('rate', 15, 2);
+            $table->decimal('amount', 15, 2);
+            $table->timestamps();
+        });
     }
 
     /**

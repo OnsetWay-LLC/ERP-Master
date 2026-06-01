@@ -9,6 +9,8 @@ class SalesInvoiceTax extends Model
     protected $fillable = [
         'sales_invoice_id',
         'tax_template_id',
+        'tax_template_line_id', // هذا هو الحقل الذي سبب الخطأ
+        'title',
         'type',
         'account_id',
         'tax_rate',

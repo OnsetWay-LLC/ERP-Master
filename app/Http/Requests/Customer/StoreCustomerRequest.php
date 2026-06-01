@@ -33,6 +33,7 @@ class StoreCustomerRequest extends FormRequest
                 'string',
                 'max:100'
             ],
+            'opening_balance' => ['required', 'numeric', 'min:0'],
         ];
     }
 

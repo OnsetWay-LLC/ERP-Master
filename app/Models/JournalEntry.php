@@ -8,19 +8,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class JournalEntry extends Model
 {
-     protected $fillable = [
-        'company_id',
-        'entry_number',
-        'entry_date',
-        'description',
-        'status',
-        'created_by',
-        'total_debit',
-        'total_credit',
-        'posted_at',
-        'cancelled_at',
-        'reversed_entry_id',
-    ];     protected $casts = [
+   protected $fillable = [
+        'company_id', 'entry_number', 'entry_date', 'total_debit', 'total_credit', 
+        'posted_at', 'cancelled_at', 'description', 'reversed_entry_id', 'status', 'created_by'
+    ];
+         protected $casts = [
         'entry_date' => 'date',
         'posted_at' => 'datetime',
         'cancelled_at' => 'datetime',

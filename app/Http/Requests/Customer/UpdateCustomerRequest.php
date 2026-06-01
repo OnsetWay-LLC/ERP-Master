@@ -33,6 +33,7 @@ class UpdateCustomerRequest extends FormRequest
                 'string',
                 'max:100'
             ],
+            'opening_balance' => ['sometimes', 'nullable', 'numeric', 'min:0'],
         ];
     }
 
