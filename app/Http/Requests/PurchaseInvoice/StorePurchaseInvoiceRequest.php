@@ -19,12 +19,12 @@ class StorePurchaseInvoiceRequest extends FormRequest
             
            'posting_date' => ['sometimes', 'nullable', 'date'],
            'posting_time' => ['sometimes', 'nullable', 'date_format:H:i:s'],
-             'due_date' => ['sometimes', 'nullable', 'date'],
+            'due_date' => ['sometimes', 'nullable', 'date'],
             'supplier_invoice_no' => ['nullable', 'string', 'max:255'],
             'supplier_invoice_date' => ['nullable', 'date'],
 
             'posting_method' => ['required', 'in:default,manual'],
-            'payment_mode' => ['required', 'in:credit,cash,bank,cheque,credit_card'],
+          
             'paid_amount' => ['nullable', 'numeric', 'min:0'],
             
             'stock_account_id' => ['nullable', 'exists:chart_of_accounts,id'],

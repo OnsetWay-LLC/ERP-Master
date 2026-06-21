@@ -24,8 +24,7 @@ class PurchaseInvoiceResource extends JsonResource
             'supplier_invoice_date' => $this->supplier_invoice_date,
 
             'posting_method' => $this->posting_method,
-            'payment_mode' => $this->payment_mode,
-
+          
             'net_total' => (float) $this->net_total,
             'tax_total' => (float) $this->tax_total,
             'fees_total' => (float) $this->fees_total,

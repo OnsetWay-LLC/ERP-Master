@@ -59,4 +59,8 @@ public function purchaseAccount()
 {
     return $this->belongsTo(ChartOfAccount::class, 'purchase_account_id');
 }
+public function company()
+{
+    return $this->belongsTo(Company::class);
+}
 }

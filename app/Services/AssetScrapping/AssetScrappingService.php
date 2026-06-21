@@ -36,6 +36,12 @@ class AssetScrappingService
 
     public function create(array $data, int $companyId, ?int $createdBy = null): AssetScrapping
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['scrap_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data, $companyId, $createdBy) {
             $asset = $this->getValidAsset($companyId, (int) $data['asset_id']);
 
@@ -77,7 +83,12 @@ class AssetScrappingService
             if ($scrapping->status !== 'draft') {
                 throw new InvalidArgumentException('Submitted asset scrapping cannot be updated.');
             }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $scrapping->company_id,
+        $data['scrap_date'] ?? $scrapping->scrap_date,
+        'update'
+    );
             $assetId = $data['asset_id'] ?? $scrapping->asset_id;
 
             $asset = $this->getValidAsset($scrapping->company_id, (int) $assetId);
@@ -113,6 +124,12 @@ class AssetScrappingService
 
     public function submit(AssetScrapping $scrapping, ?int $submittedBy = null): AssetScrapping
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $scrapping->company_id,
+        $scrapping->scrap_date,
+        'create'
+    );
         return DB::transaction(function () use ($scrapping, $submittedBy) {
             if ($scrapping->status !== 'draft') {
                 throw new InvalidArgumentException('Only draft asset scrapping can be submitted.');

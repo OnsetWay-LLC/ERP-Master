@@ -36,7 +36,12 @@ class PurchaseReceiptService
     {
         return DB::transaction(function () use ($data) {
             $companyId = Company::query()->value('id');
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'] ?? now()->toDateString(),
+        'create'
+    );
             $totals = $this->calculateTotals($data, $companyId);
 
             $receipt = PurchaseReceipt::create([
@@ -80,7 +85,12 @@ class PurchaseReceiptService
         if ($receipt->status !== 'draft') {
             throw new InvalidArgumentException('Only draft purchase receipts can be updated.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $receipt->company_id,
+        $data['posting_date'] ?? $receipt->receipt_date,
+        'update'
+    );
         return DB::transaction(function () use ($receipt, $data) {
             $totals = $this->calculateTotals($data, $receipt->company_id);
 
@@ -124,7 +134,12 @@ class PurchaseReceiptService
         if ($receipt->status !== 'draft') {
             throw new InvalidArgumentException('Only draft purchase receipts can be submitted.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $receipt->company_id,
+        $receipt->receipt_date,
+        'create'
+    );
         return DB::transaction(function () use ($receipt) {
             $receipt->load(['items', 'purchaseOrder.items']);
 
@@ -196,7 +211,12 @@ class PurchaseReceiptService
         if ($receipt->status !== 'submitted') {
             throw new InvalidArgumentException('Only submitted purchase receipts can be cancelled.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $receipt->company_id,
+        $receipt->receipt_date,
+        'update'
+    );
         return DB::transaction(function () use ($receipt) {
             $receipt->load('items');
 

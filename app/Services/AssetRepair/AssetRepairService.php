@@ -35,6 +35,12 @@ class AssetRepairService
 
     public function create(array $data, int $companyId, ?int $createdBy = null): AssetRepair
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data, $companyId, $createdBy) {
             $asset = $this->getValidAsset($companyId, (int) $data['asset_id']);
 
@@ -70,6 +76,7 @@ class AssetRepairService
 
     public function update(AssetRepair $repair, array $data): AssetRepair
     {
+        
         return DB::transaction(function () use ($repair, $data) {
             if ($repair->status !== 'draft') {
                 throw new InvalidArgumentException('Submitted asset repair cannot be updated.');

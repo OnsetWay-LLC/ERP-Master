@@ -69,21 +69,24 @@ class FinancialYearService
     }
 
     public function close(FinancialYear $financialYear, int $userId): FinancialYear
-    {
-        return DB::transaction(function () use ($financialYear, $userId) {
-            if ($financialYear->status !== 'open') {
-                throw new InvalidArgumentException('Only open financial years can be closed.');
-            }
+{
+    return DB::transaction(function () use ($financialYear, $userId) {
+        if ($financialYear->status !== 'open') {
+            throw new InvalidArgumentException('Only open financial years can be closed.');
+        }
 
-            $financialYear->update([
-                'status' => 'closed',
-                'closed_at' => now(),
-                'closed_by' => $userId,
-            ]);
+        $financialYear->update([
+            'status' => 'closed',
+            'closed_at' => now(),
+            'closed_by' => $userId,
+            'grace_period_end' => \Carbon\Carbon::parse($financialYear->end_date)
+                ->addMonths(2)
+                ->toDateString(),
+        ]);
 
-            return $financialYear->fresh();
-        });
-    }
+        return $financialYear->fresh();
+    });
+}
 
     public function reopen(FinancialYear $financialYear): FinancialYear
     {
@@ -111,45 +114,63 @@ class FinancialYearService
         $financialYear->delete();
     }
 
-    public function validateTransactionDate(
-        int $companyId,
-        string $postingDate,
-        string $actionType = 'create'
-    ): void {
-        $this->autoPermanentlyCloseExpiredYears($companyId);
+   public function validateTransactionDate(
+    int $companyId,
+    string $postingDate,
+    string $actionType = 'create'
+): void {
+    $this->autoPermanentlyCloseExpiredYears($companyId);
 
-        $year = FinancialYear::query()
-            ->where('company_id', $companyId)
-            ->whereDate('start_date', '<=', $postingDate)
-            ->whereDate('end_date', '>=', $postingDate)
-            ->first();
+    $year = FinancialYear::query()
+        ->where('company_id', $companyId)
+        ->whereDate('start_date', '<=', $postingDate)
+        ->whereDate('end_date', '>=', $postingDate)
+        ->first();
 
-        if (! $year) {
-            return;
+    if (! $year) {
+        return;
+    }
+
+    if ($year->status === 'open') {
+        return;
+    }
+
+    if ($year->status === 'closed') {
+        if ($actionType === 'create') {
+            throw new InvalidArgumentException(
+                'Cannot create new transactions in a closed financial year. Please use the new financial year.'
+            );
         }
 
-        if ($year->status === 'permanently_closed') {
-            throw new InvalidArgumentException('Financial year is permanently closed.');
-        }
-
-        if ($year->status === 'closed' && $actionType === 'create') {
-            throw new InvalidArgumentException('Cannot create new transactions in a closed financial year.');
-        }
-
-        if ($year->status === 'closed' && $actionType === 'update') {
+        if ($actionType === 'update') {
             if (now()->toDateString() > $year->grace_period_end?->format('Y-m-d')) {
-                $year->update(['status' => 'permanently_closed']);
-                throw new InvalidArgumentException('Grace period has ended. Financial year is permanently closed.');
+                $year->update([
+                    'status' => 'permanently_closed',
+                ]);
+
+                throw new InvalidArgumentException(
+                    'Grace period has ended. This financial year is permanently closed.'
+                );
             }
 
             $user = auth('api')->user();
 
             if (! $user || ! $user->hasAnyRole(['CFO', 'Accountant Chief', 'Chief Accountant'])) {
-                throw new InvalidArgumentException('Only CFO or Chief Accountant can update transactions during grace period.');
+                throw new InvalidArgumentException(
+                    'Only CFO or Chief Accountant can update transactions during the grace period.'
+                );
             }
+
+            return;
         }
     }
 
+    if ($year->status === 'permanently_closed') {
+        throw new InvalidArgumentException(
+            'Financial year is permanently closed.'
+        );
+    }
+}
     public function autoPermanentlyCloseExpiredYears(int $companyId): void
     {
         FinancialYear::query()

@@ -35,6 +35,12 @@ class StockEntryService
 
     public function create(array $data, int $companyId, ?int $createdBy = null): StockEntry
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'] ?? now()->toDateString(),
+        'create'
+    );
         return DB::transaction(function () use ($data, $companyId, $createdBy) {
             $entry = StockEntry::create([
                 'company_id' => $companyId,
@@ -86,6 +92,12 @@ class StockEntryService
 
     public function updateDraft(int $companyId, int $id, array $data): StockEntry
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'] ?? now()->toDateString(),
+        'update'
+    );
         return DB::transaction(function () use ($companyId, $id, $data) {
             $entry = StockEntry::query()
                 ->where('company_id', $companyId)
@@ -129,6 +141,14 @@ class StockEntryService
 
     public function submit(int $companyId, int $id): StockEntry
     {
+        $entry = StockEntry::findOrFail($id);
+
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $entry->posting_date,
+        'create'
+    );
         return DB::transaction(function () use ($companyId, $id) {
             $entry = StockEntry::query()
                 ->where('company_id', $companyId)
@@ -195,6 +215,14 @@ if ($entry->entry_type === 'material_issue') {
 
     public function cancel(int $companyId, int $id): StockEntry
 {
+    $entry = StockEntry::findOrFail($id);
+
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $entry->posting_date,
+        'update'
+    );
     return DB::transaction(function () use ($companyId, $id) {
         $entry = StockEntry::query()
             ->where('company_id', $companyId)
@@ -535,6 +563,12 @@ private function processReceipt(
             'Default inventory account and inventory adjustment account must be configured.'
         );
     }
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $entry->posting_date,
+        'create'
+    );
 
     $journalEntry = JournalEntry::create([
         'company_id' => $companyId,
@@ -596,7 +630,12 @@ private function createMaterialIssueJournalEntry(int $companyId, StockEntry $ent
             'Default inventory account and inventory adjustment account must be configured.'
         );
     }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $entry->posting_date,
+        'create'
+    );
     $journalEntry = JournalEntry::create([
         'company_id' => $companyId,
         'entry_number' => $this->generateJournalEntryNumber($companyId),
@@ -941,11 +980,16 @@ private function createMaterialReceiptReverseJournalEntry(int $companyId, StockE
             'Default inventory account and inventory adjustment account must be configured.'
         );
     }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $entry->posting_date,
+        'update'
+    );
     $journalEntry = JournalEntry::create([
         'company_id' => $companyId,
         'entry_number' => $this->generateJournalEntryNumber($companyId),
-        'entry_date' => now()->toDateString(),
+        'entry_date' => $entry->posting_date,
         'total_debit' => $amount,
         'total_credit' => $amount,
         'posted_at' => now(),
@@ -1001,11 +1045,16 @@ private function createMaterialIssueReverseJournalEntry(int $companyId, StockEnt
             'Default inventory account and inventory adjustment account must be configured.'
         );
     }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $entry->posting_date,
+        'update'
+    );
     $journalEntry = JournalEntry::create([
         'company_id' => $companyId,
         'entry_number' => $this->generateJournalEntryNumber($companyId),
-        'entry_date' => now()->toDateString(),
+        'entry_date' => $entry->posting_date,
         'total_debit' => $amount,
         'total_credit' => $amount,
         'posted_at' => now(),

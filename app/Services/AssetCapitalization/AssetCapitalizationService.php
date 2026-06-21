@@ -30,6 +30,12 @@ class AssetCapitalizationService
 
     public function create(array $data, int $companyId, ?int $createdBy = null): AssetCapitalization
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data, $companyId, $createdBy) {
             $targetAsset = $this->getValidTargetAsset($companyId, (int) $data['target_asset_id']);
 
@@ -60,11 +66,17 @@ class AssetCapitalizationService
 
     public function update(AssetCapitalization $capitalization, array $data): AssetCapitalization
     {
+        
         return DB::transaction(function () use ($capitalization, $data) {
             if ($capitalization->status !== 'draft') {
                 throw new InvalidArgumentException('Submitted capitalization cannot be updated.');
             }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $capitalization->company_id,
+        $data['posting_date'] ?? $capitalization->posting_date,
+        'update'
+    );
             $targetAssetId = $data['target_asset_id'] ?? $capitalization->target_asset_id;
 
             $targetAsset = $this->getValidTargetAsset(
@@ -102,6 +114,12 @@ class AssetCapitalizationService
 
     public function submit(AssetCapitalization $capitalization, ?int $submittedBy = null): AssetCapitalization
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $capitalization->company_id,
+        $capitalization->posting_date,
+        'create'
+    );
         return DB::transaction(function () use ($capitalization, $submittedBy) {
             if ($capitalization->status !== 'draft') {
                 throw new InvalidArgumentException('Only draft capitalization can be submitted.');

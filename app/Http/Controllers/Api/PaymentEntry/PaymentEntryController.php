@@ -22,8 +22,9 @@ class PaymentEntryController extends Controller
 ): JsonResponse {
     $paymentEntry = $this->service->createFromPurchaseInvoice($request->validated());
 
-    return response()->json([
-        'message' => 'Payment Entry created as draft successfully.',
+   return response()->json([
+        'status' => true,
+        'message' => 'Payment Entry created successfully.',
         'data' => $paymentEntry,
     ], 201);
 }

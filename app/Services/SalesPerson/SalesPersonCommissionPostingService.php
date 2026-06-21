@@ -36,7 +36,12 @@ class SalesPersonCommissionPostingService
 
             [$months, $periodStartDate, $periodEndDate, $totalPeriodTarget] =
                 $this->resolvePeriodFromDistribution($target, (int) $data['fiscal_year']);
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $periodEndDate,
+        'create'
+    );
             $alreadyPosted = SalesPersonCommission::query()
                 ->where('sales_person_id', $salesPerson->id)
                 ->where('sales_person_target_id', $target->id)
@@ -219,6 +224,12 @@ class SalesPersonCommissionPostingService
         int $payrollAccountId,
         string $salesPersonName
     ): JournalEntry {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $entryDate,
+        'create'
+    );
         $entry = JournalEntry::query()->create([
             'company_id' => $companyId,
             'entry_number' => $this->generateEntryNumber($companyId),

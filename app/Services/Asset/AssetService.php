@@ -26,6 +26,7 @@ class AssetService
 
    public function create(array $data, int $companyId, ?int $createdBy = null): Asset
 {
+   
     return DB::transaction(function () use ($data, $companyId, $createdBy) {
         $assetItem = $this->getValidAssetItem($companyId, (int) $data['asset_item_id']);
 
@@ -62,7 +63,16 @@ class AssetService
             $data['net_purchase_amount'] = $invoiceData['net_purchase_amount'];
             $data['purchase_receipt_id'] = $invoiceData['purchase_receipt_id'];
         }
+$transactionDate = $data['purchase_date']
+    ?? $data['available_for_use_date']
+    ?? now()->toDateString();
 
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $transactionDate,
+        'create'
+    );
         if ($data['available_for_use_date'] < $data['purchase_date']) {
             throw new InvalidArgumentException('Available for use date must be greater than or equal to purchase date.');
         }
@@ -77,11 +87,22 @@ class AssetService
 
 public function update(Asset $asset, array $data): Asset
 {
+    
     return DB::transaction(function () use ($asset, $data) {
         if ($asset->status === 'submitted') {
             throw new InvalidArgumentException('Submitted asset cannot be updated.');
         }
+$transactionDate = $data['purchase_date']
+    ?? $data['available_for_use_date']
+    ?? $asset->purchase_date?->format('Y-m-d')
+    ?? $asset->available_for_use_date?->format('Y-m-d');
 
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $asset->company_id,
+        $transactionDate,
+        'update'
+    );
         $assetItem = isset($data['asset_item_id'])
             ? $this->getValidAssetItem($asset->company_id, (int) $data['asset_item_id'])
             : $asset->assetItem;
@@ -143,6 +164,16 @@ public function update(Asset $asset, array $data): Asset
 
 public function submit(Asset $asset): Asset
 {
+    $transactionDate = $asset->purchase_date?->format('Y-m-d')
+    ?? $asset->available_for_use_date?->format('Y-m-d')
+    ?? now()->toDateString();
+
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $asset->company_id,
+        $transactionDate,
+        'create'
+    );
     return DB::transaction(function () use ($asset) {
         if ($asset->status === 'submitted') {
             throw new InvalidArgumentException('Asset is already submitted.');

@@ -273,6 +273,7 @@ Route::prefix('inventory/purchase-receipts')
     Route::middleware(['auth:api', 'permission:screen.purchase_invoices', 'locale'])->group(function () {
     Route::get('/purchase-invoices', [PurchaseInvoiceController::class, 'index']);
     Route::post('/purchase-invoices', [PurchaseInvoiceController::class, 'store']);
+    Route::get('/purchase-invoices/accounts', [PurchaseInvoiceController::class, 'accounts']);
     Route::get('/purchase-invoices/{purchaseInvoice}', [PurchaseInvoiceController::class, 'show']);
     Route::post('/purchase-invoices/{purchaseInvoice}/submit', [PurchaseInvoiceController::class, 'submit']);
     Route::put( '/purchase-invoices/{id}', [PurchaseInvoiceController::class, 'update']);

@@ -38,6 +38,12 @@ class AssetSaleService
 
     public function create(array $data, int $companyId, ?int $createdBy = null): AssetSale
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data, $companyId, $createdBy) {
             $asset = $this->getValidAsset($companyId, (int) $data['asset_id']);
             $warehouse = $this->getValidWarehouse($companyId, (int) $data['warehouse_id']);
@@ -169,11 +175,17 @@ class AssetSaleService
 
     public function update(AssetSale $sale, array $data): AssetSale
     {
+        
         return DB::transaction(function () use ($sale, $data) {
             if ($sale->status !== 'draft') {
                 throw new InvalidArgumentException('Submitted asset sale cannot be updated.');
             }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $sale->company_id,
+        $data['posting_date'] ?? $sale->posting_date,
+        'update'
+    );
             $asset = isset($data['asset_id'])
                 ? $this->getValidAsset($sale->company_id, (int) $data['asset_id'])
                 : $sale->asset()->with(['assetCategory'])->first();
@@ -245,6 +257,12 @@ class AssetSaleService
 
     public function submit(AssetSale $sale, ?int $submittedBy = null): AssetSale
     {
+       app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $sale->company_id,
+        $sale->posting_date,
+        'create'
+    );
         return DB::transaction(function () use ($sale, $submittedBy) {
             if ($sale->status !== 'draft') {
                 throw new InvalidArgumentException('Only draft asset sale can be submitted.');

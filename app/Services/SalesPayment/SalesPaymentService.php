@@ -38,6 +38,14 @@ class SalesPaymentService
 
     public function create(array $data): SalesPayment
     {
+        $companyId = Company::query()->value('id');
+
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['payment_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data) {
             $companyId = Company::query()->value('id');
 
@@ -95,7 +103,12 @@ class SalesPaymentService
         if ($payment->status !== 'draft') {
             throw new RuntimeException('Only draft payments can be submitted.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $payment->company_id,
+        $payment->payment_date,
+        'create'
+    );
         return DB::transaction(function () use ($payment) {
             $payment->load('salesInvoice');
 
@@ -140,7 +153,12 @@ class SalesPaymentService
         if ($payment->status !== 'submitted') {
             throw new RuntimeException('Only submitted payments can be cancelled.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $payment->company_id,
+        $payment->payment_date,
+        'update'
+    );
         return DB::transaction(function () use ($payment) {
             $invoice = SalesInvoice::query()
                 ->where('id', $payment->sales_invoice_id)
@@ -204,6 +222,12 @@ class SalesPaymentService
 
     private function createJournalEntry(SalesPayment $payment): JournalEntry
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $payment->company_id,
+        $payment->payment_date,
+        'create'
+    );
         $journalEntry = JournalEntry::create([
             'company_id' => $payment->company_id,
             'entry_number' => $this->generateJournalEntryNumber($payment->company_id),
@@ -235,36 +259,43 @@ class SalesPaymentService
     }
 
     private function createReverseJournalEntry(SalesPayment $payment): JournalEntry
-    {
-        $journalEntry = JournalEntry::create([
-            'company_id' => $payment->company_id,
-            'entry_number' => $this->generateJournalEntryNumber($payment->company_id),
-            'entry_date' => now()->toDateString(),
-            'total_debit' => $payment->paid_amount,
-            'total_credit' => $payment->paid_amount,
-            'description' => 'Reverse Sales Payment - ' . $payment->payment_number,
-            'status' => 'posted',
-            'created_by' => auth('api')->id(),
-        ]);
+{
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $payment->company_id,
+            $payment->payment_date,
+            'update'
+        );
 
-        $journalEntry->lines()->create([
-            'company_id' => $payment->company_id,
-            'account_id' => $payment->receivable_account_id,
-            'debit' => $payment->paid_amount,
-            'credit' => 0,
-            'note' => 'Reverse customer receivable',
-        ]);
+    $journalEntry = JournalEntry::create([
+        'company_id' => $payment->company_id,
+        'entry_number' => $this->generateJournalEntryNumber($payment->company_id),
+        'entry_date' => $payment->payment_date,
+        'total_debit' => $payment->paid_amount,
+        'total_credit' => $payment->paid_amount,
+        'description' => 'Reverse Sales Payment - ' . $payment->payment_number,
+        'status' => 'posted',
+        'created_by' => auth('api')->id(),
+    ]);
 
-        $journalEntry->lines()->create([
-            'company_id' => $payment->company_id,
-            'account_id' => $payment->payment_account_id,
-            'debit' => 0,
-            'credit' => $payment->paid_amount,
-            'note' => 'Reverse receipt account',
-        ]);
+    $journalEntry->lines()->create([
+        'company_id' => $payment->company_id,
+        'account_id' => $payment->receivable_account_id,
+        'debit' => $payment->paid_amount,
+        'credit' => 0,
+        'note' => 'Reverse customer receivable',
+    ]);
 
-        return $journalEntry;
-    }
+    $journalEntry->lines()->create([
+        'company_id' => $payment->company_id,
+        'account_id' => $payment->payment_account_id,
+        'debit' => 0,
+        'credit' => $payment->paid_amount,
+        'note' => 'Reverse receipt account',
+    ]);
+
+    return $journalEntry;
+}
 
     private function ensureInvoicePaymentFields(SalesInvoice $invoice): void
     {

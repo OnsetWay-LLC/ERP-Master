@@ -18,6 +18,14 @@ class SalesReturnService
 {
     public function create(array $data): SalesReturn
     {
+        $companyId = Company::query()->firstOrFail()->id;
+
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data) {
             $company = Company::query()->firstOrFail();
 
@@ -80,7 +88,12 @@ public function update(SalesReturn $salesReturn, array $data): SalesReturn
     if ($salesReturn->status !== 'draft') {
         throw new RuntimeException('Only draft sales returns can be updated.');
     }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesReturn->company_id,
+        $data['posting_date'],
+        'update'
+    );
     return DB::transaction(function () use ($salesReturn, $data) {
         $companyId = $salesReturn->company_id;
 
@@ -157,7 +170,12 @@ public function delete(SalesReturn $salesReturn): void
         if ($salesReturn->status !== 'draft') {
             throw new RuntimeException('Only draft sales returns can be submitted.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesReturn->company_id,
+        $salesReturn->posting_date,
+        'create'
+    );
         return DB::transaction(function () use ($salesReturn) {
             $salesReturn->load(['items', 'taxes', 'fees', 'salesInvoice']);
 
@@ -229,11 +247,16 @@ public function delete(SalesReturn $salesReturn): void
 private function createReverseJournalEntry(SalesReturn $salesReturn): JournalEntry
 {
     $settings = CompanyAccountSetting::where('company_id', $salesReturn->company_id)->first();
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesReturn->company_id,
+        $salesReturn->posting_date,
+        'update'
+    );
     $journalEntry = JournalEntry::create([
         'company_id' => $salesReturn->company_id,
         'entry_number' => $this->generateJournalEntryNumber($salesReturn->company_id),
-        'entry_date' => now()->toDateString(),
+       'entry_date' => $salesReturn->posting_date,
         'total_debit' => 0,
         'total_credit' => 0,
         'description' => 'Reverse Sales Return - ' . $salesReturn->return_number,
@@ -349,7 +372,12 @@ public function cancel(SalesReturn $salesReturn): SalesReturn
     if ($salesReturn->status !== 'submitted') {
         throw new RuntimeException('Only submitted sales returns can be cancelled.');
     }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesReturn->company_id,
+        $salesReturn->posting_date,
+        'update'
+    );
     return DB::transaction(function () use ($salesReturn) {
         $salesReturn->load([
             'items',
@@ -551,7 +579,12 @@ public function cancel(SalesReturn $salesReturn): SalesReturn
     private function createJournalEntry(SalesReturn $salesReturn): JournalEntry
     {
         $settings = CompanyAccountSetting::where('company_id', $salesReturn->company_id)->first();
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesReturn->company_id,
+        $salesReturn->posting_date,
+        'create'
+    );
         $journalEntry = JournalEntry::create([
             'company_id' => $salesReturn->company_id,
             'entry_number' => $this->generateJournalEntryNumber($salesReturn->company_id),

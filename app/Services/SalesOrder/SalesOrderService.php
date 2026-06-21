@@ -47,6 +47,14 @@ class SalesOrderService
 
     public function create(array $data): SalesOrder
     {
+        $company = Company::query()->firstOrFail();
+
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $company->id,
+        $data['order_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data) {
             $company = Company::query()->firstOrFail();
 
@@ -91,7 +99,12 @@ class SalesOrderService
 
         return DB::transaction(function () use ($salesOrder, $data) {
             $companyId = $salesOrder->company_id;
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['order_date'] ?? $salesOrder->order_date,
+        'update'
+    );
             $totals = $this->calculateTotals($companyId, $data);
 
             $salesOrder->update([
@@ -130,7 +143,12 @@ class SalesOrderService
         if ($salesOrder->status !== 'draft') {
             throw new RuntimeException('Only draft sales orders can be submitted.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesOrder->company_id,
+        $salesOrder->order_date,
+        'create'
+    );
         return DB::transaction(function () use ($salesOrder) {
             $salesOrder->load(['items', 'customer']);
 
@@ -175,7 +193,12 @@ class SalesOrderService
         if (in_array($salesOrder->status, ['to_bill', 'completed'])) {
             throw new RuntimeException('This sales order cannot be cancelled.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesOrder->company_id,
+        $salesOrder->order_date,
+        'update'
+    );
         return DB::transaction(function () use ($salesOrder) {
             if ($salesOrder->status === 'delivery_and_to_bill') {
                 $salesOrder->load('items');

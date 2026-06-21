@@ -21,7 +21,12 @@ class PurchaseReturnService
             $invoice = PurchaseInvoice::with('items')
                 ->lockForUpdate()
                 ->findOrFail($data['purchase_invoice_id']);
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $invoice->company_id,
+        $data['posting_date'],
+        'create'
+    );
             $this->validateInvoice($invoice);
 
             [$purchaseAccountId, $supplierAccountId] = $this->resolveAccounts($invoice, $data);
@@ -56,7 +61,12 @@ class PurchaseReturnService
     {
         return DB::transaction(function () use ($purchaseReturn, $data) {
             $purchaseReturn = PurchaseReturn::lockForUpdate()->findOrFail($purchaseReturn->id);
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $purchaseReturn->company_id,
+        $data['posting_date'] ?? $purchaseReturn->posting_date,
+        'update'
+    );
             if ($purchaseReturn->status !== 'draft') {
                 abort(422, 'Only draft Purchase Return can be edited.');
             }
@@ -94,6 +104,12 @@ class PurchaseReturnService
 
     public function submit(PurchaseReturn $purchaseReturn): PurchaseReturn
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $purchaseReturn->company_id,
+        $purchaseReturn->posting_date,
+        'create'
+    );
         return DB::transaction(function () use ($purchaseReturn) {
             $purchaseReturn = PurchaseReturn::lockForUpdate()
                 ->with(['items', 'taxes', 'fees', 'purchaseInvoice'])
@@ -138,6 +154,12 @@ class PurchaseReturnService
 
     public function cancel(PurchaseReturn $purchaseReturn): PurchaseReturn
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $purchaseReturn->company_id,
+        $purchaseReturn->posting_date,
+        'update'
+    );
         return DB::transaction(function () use ($purchaseReturn) {
             $purchaseReturn = PurchaseReturn::lockForUpdate()
                 ->with(['items', 'taxes', 'fees', 'purchaseInvoice'])

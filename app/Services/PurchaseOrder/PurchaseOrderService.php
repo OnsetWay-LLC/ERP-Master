@@ -17,6 +17,12 @@ class PurchaseOrderService
 {
     public function create(array $data): PurchaseOrder
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        Company::firstOrFail()->id,
+        $data['posting_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data) {
             $company = Company::firstOrFail();
 
@@ -142,7 +148,12 @@ private function refreshMaterialRequestStatus(int $materialRequestId): void
         if ($purchaseOrder->status !== 'draft') {
             throw new RuntimeException('Only draft purchase orders can be updated.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $purchaseOrder->company_id,
+        $data['posting_date'] ?? $purchaseOrder->posting_date,
+        'update'
+    );
         return DB::transaction(function () use ($purchaseOrder, $data) {
             $companyId = $purchaseOrder->company_id;
 
@@ -184,7 +195,12 @@ private function refreshMaterialRequestStatus(int $materialRequestId): void
         if ($purchaseOrder->status !== 'draft') {
             throw new RuntimeException('Only draft purchase orders can be submitted.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $purchaseOrder->company_id,
+        $purchaseOrder->posting_date,
+        'create'
+    );
         $purchaseOrder->update([
             'status' => 'confirmed',
         ]);

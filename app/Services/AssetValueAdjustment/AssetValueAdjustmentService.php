@@ -34,6 +34,12 @@ class AssetValueAdjustmentService
 
     public function create(array $data, int $companyId, ?int $createdBy = null): AssetValueAdjustment
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data, $companyId, $createdBy) {
             $asset = $this->getValidAsset($companyId, (int) $data['asset_id']);
 
@@ -75,7 +81,12 @@ class AssetValueAdjustmentService
             if ($adjustment->status !== 'draft') {
                 throw new InvalidArgumentException('Submitted asset value adjustment cannot be updated.');
             }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $adjustment->company_id,
+        $data['posting_date'] ?? $adjustment->posting_date,
+        'update'
+    );
             $assetId = $data['asset_id'] ?? $adjustment->asset_id;
 
             $asset = $this->getValidAsset(
@@ -122,6 +133,12 @@ class AssetValueAdjustmentService
 
     public function submit(AssetValueAdjustment $adjustment, ?int $submittedBy = null): AssetValueAdjustment
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $adjustment->company_id,
+        $adjustment->posting_date,
+        'create'
+    );
         return DB::transaction(function () use ($adjustment, $submittedBy) {
             if ($adjustment->status !== 'draft') {
                 throw new InvalidArgumentException('Only draft asset value adjustment can be submitted.');

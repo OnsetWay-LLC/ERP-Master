@@ -23,6 +23,14 @@ class SalesInvoiceService
 {
     public function create(array $data): SalesInvoice
     {
+        $company = Company::query()->firstOrFail();
+
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $company->id,
+        $data['posting_date'],
+        'create'
+    );
         return DB::transaction(function () use ($data) {
             $company = Company::query()->firstOrFail();
 
@@ -92,7 +100,12 @@ class SalesInvoiceService
 
         return DB::transaction(function () use ($salesInvoice, $data) {
             $companyId = $salesInvoice->company_id;
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $companyId,
+        $data['posting_date'] ?? $salesInvoice->posting_date,
+        'update'
+    );
             $discountDecision = $this->handleDiscountDecision($companyId, $data);
             $data['discount_percentage'] = $discountDecision['applied_discount_percentage'];
 
@@ -159,7 +172,12 @@ class SalesInvoiceService
         if ($salesInvoice->pendingDiscountApproval()->exists()) {
             throw new RuntimeException('Cannot submit invoice while discount approval is pending.');
         }
-
+app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $salesInvoice->company_id,
+        $salesInvoice->posting_date,
+        'create'
+    );
         return DB::transaction(function () use ($salesInvoice) {
             $salesInvoice->load([
                 'items.item',
@@ -248,6 +266,12 @@ class SalesInvoiceService
 
     private function postJournalEntry(SalesInvoice $invoice): void
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $invoice->company_id,
+        $invoice->posting_date,
+        'create'
+    );
         $journalEntry = JournalEntry::create([
             'company_id' => $invoice->company_id,
             'entry_number' => $this->generateJournalEntryNumber($invoice->company_id),
@@ -757,6 +781,12 @@ class SalesInvoiceService
 
     private function createStockMovementEntry(SalesInvoice $invoice): void
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+    ->validateTransactionDate(
+        $invoice->company_id,
+        $invoice->posting_date,
+        'create'
+    );
         $stockEntry = StockEntry::query()->create([
             'company_id' => $invoice->company_id,
             'series' => 'SINV-ST-' . now()->format('Y') . '-' . rand(1000, 9999),

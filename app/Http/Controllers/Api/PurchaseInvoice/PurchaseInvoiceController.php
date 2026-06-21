@@ -1,38 +1,41 @@
 <?php
 
-namespace app\Http\Controllers\Api\PurchaseInvoice;
+namespace App\Http\Controllers\Api\PurchaseInvoice;
+
 use App\Http\Controllers\Controller;
+use App\Http\Requests\PurchaseInvoice\StorePurchaseInvoiceRequest;
 use App\Http\Resources\PurchaseInvoice\PurchaseInvoiceResource;
 use App\Models\PurchaseInvoice;
-use App\Services\PurchaseInvoice\PurchaseInvoiceService;
-use App\Http\Requests\PurchaseInvoice\StorePurchaseInvoiceRequest;
 use App\Models\PurchaseReceipt;
+use App\Services\PurchaseInvoice\PurchaseInvoiceService;
 use Illuminate\Http\Response;
 use Mpdf\Mpdf;
+use NumberFormatter;
+
 class PurchaseInvoiceController extends Controller
 {
     public function __construct(private PurchaseInvoiceService $service) {}
 
     public function index()
-{
-    $invoices = PurchaseInvoice::with([
-        'supplier',
-        'purchaseReceipt',
-        'purchaseOrder',
-        'items.item',
-        'taxes.account',
-        'fees.account',
-        'journalEntry',
-    ])
-    ->where('status', '!=', 'cancelled')
-    ->latest('id')
-    ->paginate(10);
+    {
+        $invoices = PurchaseInvoice::with([
+            'company',
+            'supplier',
+            'purchaseReceipt',
+            'purchaseOrder',
+            'items.item',
+            'items.warehouse',
+            'taxes.account',
+            'fees.account',
+            'journalEntry',
+        ])
+            ->where('status', '!=', 'cancelled')
+            ->latest('id')
+            ->paginate(10);
 
-    return response()->json([
-        'status' => true,
-        'data' => PurchaseInvoiceResource::collection($invoices),
-    ]);
-}
+        return PurchaseInvoiceResource::collection($invoices);
+    }
+
     public function store(StorePurchaseInvoiceRequest $request)
     {
         $receipt = PurchaseReceipt::findOrFail($request->purchase_receipt_id);
@@ -51,7 +54,15 @@ class PurchaseInvoiceController extends Controller
     public function show(PurchaseInvoice $purchaseInvoice)
     {
         return new PurchaseInvoiceResource(
-            $purchaseInvoice->load(['supplier','items','taxes.account','fees.account','journalEntry'])
+            $purchaseInvoice->load([
+                'company',
+                'supplier',
+                'items.item',
+                'items.warehouse',
+                'taxes.account',
+                'fees.account',
+                'journalEntry',
+            ])
         );
     }
 
@@ -64,53 +75,23 @@ class PurchaseInvoiceController extends Controller
             'data' => new PurchaseInvoiceResource($invoice),
         ]);
     }
-public function update(
-    StorePurchaseInvoiceRequest $request,
-    $id
-) {
-    $invoice = PurchaseInvoice::findOrFail($id);
 
-    $data = $this->service->update(
-        $invoice,
-        $request->validated()
-    );
+    public function update(StorePurchaseInvoiceRequest $request, $id)
+    {
+        $invoice = PurchaseInvoice::findOrFail($id);
 
-    return response()->json([
-        'status' => true,
-        'message' => 'Purchase Invoice updated successfully.',
-        'data' => $data,
-    ]);
-}
-public function pdf(PurchaseInvoice $purchaseInvoice): Response
-{
-    $purchaseInvoice->load([
-        'supplier',
-        'items.item',
-        'items.warehouse',
-        'taxes.account',
-        'fees.account',
-    ]);
+        $data = $this->service->update(
+            $invoice,
+            $request->validated()
+        );
 
-    $html = view('purchase-invoices.pdf', [
-        'invoice' => $purchaseInvoice,
-    ])->render();
+        return response()->json([
+            'status' => true,
+            'message' => 'Purchase Invoice updated successfully.',
+            'data' => $data,
+        ]);
+    }
 
-    $mpdf = new Mpdf([
-        'mode' => 'utf-8',
-        'format' => 'A4',
-        'margin_top' => 10,
-        'margin_bottom' => 10,
-        'margin_left' => 10,
-        'margin_right' => 10,
-    ]);
-
-    $mpdf->WriteHTML($html);
-
-    return response($mpdf->Output('purchase-invoice.pdf', 'S'), 200, [
-        'Content-Type' => 'application/pdf',
-        'Content-Disposition' => 'inline; filename="purchase-invoice.pdf"',
-    ]);
-}
     public function cancel(PurchaseInvoice $purchaseInvoice)
     {
         $invoice = $this->service->cancel($purchaseInvoice);
@@ -120,4 +101,77 @@ public function pdf(PurchaseInvoice $purchaseInvoice): Response
             'data' => new PurchaseInvoiceResource($invoice),
         ]);
     }
+
+    public function pdf(PurchaseInvoice $purchaseInvoice): Response
+    {
+        $purchaseInvoice->load([
+            'company',
+            'supplier',
+            'items.item',
+            'items.warehouse',
+            'taxes.account',
+            'fees.account',
+        ]);
+
+        $isArabic = app()->getLocale() === 'ar';
+
+        $companyName = $isArabic
+            ? ($purchaseInvoice->company?->name_ar ?? $purchaseInvoice->company?->name_en)
+            : ($purchaseInvoice->company?->name_en ?? $purchaseInvoice->company?->name_ar);
+
+        $amountWords = $this->amountToWords(
+            (float) $purchaseInvoice->grand_total,
+            $isArabic
+        );
+
+        $html = view('purchase-invoices.pdf', [
+            'invoice' => $purchaseInvoice,
+            'companyName' => $companyName,
+            'amountWords' => $amountWords,
+        ])->render();
+
+        $mpdf = new Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'margin_top' => 10,
+            'margin_bottom' => 10,
+            'margin_left' => 10,
+            'margin_right' => 10,
+            'autoScriptToLang' => true,
+            'autoLangToFont' => true,
+        ]);
+
+        $mpdf->WriteHTML($html);
+
+        return response($mpdf->Output('purchase-invoice.pdf', 'S'), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="purchase-invoice.pdf"',
+        ]);
+    }
+
+    private function amountToWords(float $amount, bool $isArabic): string
+    {
+        $integerPart = (int) floor($amount);
+        $decimalPart = (int) round(($amount - $integerPart) * 100);
+
+        $locale = $isArabic ? 'ar' : 'en';
+        $formatter = new NumberFormatter($locale, NumberFormatter::SPELLOUT);
+
+        $mainWords = $formatter->format($integerPart);
+        $decimalWords = $decimalPart > 0 ? $formatter->format($decimalPart) : null;
+
+        if ($isArabic) {
+            return $decimalPart > 0
+                ? "{$mainWords} دينار أردني و {$decimalWords} فلس فقط"
+                : "{$mainWords} دينار أردني فقط";
+        }
+
+        return $decimalPart > 0
+            ? ucfirst($mainWords) . " Jordanian Dinars and {$decimalWords} fils only"
+            : ucfirst($mainWords) . " Jordanian Dinars only";
+    }
+    public function accounts()
+{
+    return $this->service->purchaseInvoiceAccounts();
+}
 }

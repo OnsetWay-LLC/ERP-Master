@@ -4,6 +4,7 @@ namespace App\Services\PaymentEntries;
 
 use App\Models\CompanyAccountSetting;
 use App\Models\JournalEntry;
+use App\Models\JournalEntryLine;
 use App\Models\PaymentEntry;
 use App\Models\PurchaseInvoice;
 use Illuminate\Support\Facades\DB;
@@ -52,6 +53,7 @@ class PaymentEntryService
             $afterOutstanding = round($beforeOutstanding - $paidAmount, 2);
 
             $paymentEntry = PaymentEntry::create([
+             'company_id' => $invoice->company_id,
                 'series' => $this->generateSeries(),
                 'posting_date' => $data['posting_date'],
                 'supplier_id' => $invoice->supplier_id,
@@ -67,6 +69,7 @@ class PaymentEntryService
             ]);
 
             $paymentEntry->references()->create([
+                
                 'purchase_invoice_id' => $invoice->id,
                 'invoice_amount' => $invoice->grand_total,
                 'outstanding_before_payment' => $beforeOutstanding,
@@ -75,6 +78,7 @@ class PaymentEntryService
             ]);
 
             return $paymentEntry->load([
+                 
                 'supplier',
                 'paidFromAccount',
                 'payableAccount',
@@ -134,6 +138,7 @@ class PaymentEntryService
             ]);
 
             return $paymentEntry->load([
+               
                 'supplier',
                 'paidFromAccount',
                 'payableAccount',
@@ -147,31 +152,34 @@ class PaymentEntryService
     {
         $amount = (float) $paymentEntry->paid_amount;
 
-        $journalEntry = JournalEntry::create([
-            'entry_number' => $this->generateJournalEntryNumber(),
-            'entry_date' => $paymentEntry->posting_date,
-            'total_debit' => $amount,
-            'total_credit' => $amount,
-            'status' => 'posted',
-            'created_by' => auth('api')->id(),
-            'posted_at' => now(),
-        ]);
+        $invoice = $paymentEntry->references->first()?->purchaseInvoice;
 
-        $journalEntry->lines()->createMany([
-            [
-                'account_id' => $paymentEntry->payable_account_id,
-                'debit' => $amount,
-                'credit' => 0,
-                'note' => 'Payment Entry: ' . $paymentEntry->series,
-            ],
-            [
-                'account_id' => $paymentEntry->paid_from_account_id,
-                'debit' => 0,
-                'credit' => $amount,
-                'note' => 'Payment Entry: ' . $paymentEntry->series,
-            ],
-        ]);
+$journalEntry = JournalEntry::create([
+    'company_id' => $invoice->company_id,
+'entry_number' => $this->generateJournalEntryNumber($invoice->company_id),
+    'entry_date' => $paymentEntry->posting_date,
+    'total_debit' => $amount,
+    'total_credit' => $amount,
+    'status' => 'posted',
+    'created_by' => auth('api')->id(),
+    'posted_at' => now(),
+]);
 
+       $journalEntry->lines()->create([
+    'company_id' => $journalEntry->company_id,
+    'account_id' => $paymentEntry->payable_account_id,
+    'debit' => $amount,
+    'credit' => 0,
+    'note' => 'Payment Entry: ' . $paymentEntry->series,
+]);
+
+$journalEntry->lines()->create([
+    'company_id' => $journalEntry->company_id,
+    'account_id' => $paymentEntry->paid_from_account_id,
+    'debit' => 0,
+    'credit' => $amount,
+    'note' => 'Payment Entry: ' . $paymentEntry->series,
+]);
         return $journalEntry;
     }
 
@@ -188,18 +196,21 @@ class PaymentEntryService
         return 'PE-' . $year . '-' . str_pad($next, 5, '0', STR_PAD_LEFT);
     }
 
-    private function generateJournalEntryNumber(): string
-    {
-        $year = now()->format('Y');
+  private function generateJournalEntryNumber(int $companyId): string
+{
+    $year = now()->format('Y');
 
-        $last = JournalEntry::whereYear('created_at', $year)
-            ->latest('id')
-            ->first();
+    $lastNumber = JournalEntry::where('company_id', $companyId)
+        ->where('entry_number', 'like', 'JV-' . $year . '-%')
+        ->selectRaw("
+            MAX(CAST(RIGHT(entry_number, 5) AS INT)) as max_number
+        ")
+        ->value('max_number');
 
-        $next = $last ? ((int) substr($last->entry_number, -5)) + 1 : 1;
+    $next = ((int) $lastNumber) + 1;
 
-        return 'JV-' . $year . '-' . str_pad($next, 5, '0', STR_PAD_LEFT);
-    }
+    return 'JV-' . $year . '-' . str_pad($next, 5, '0', STR_PAD_LEFT);
+}
     public function update(PaymentEntry $paymentEntry, array $data): PaymentEntry
 {
     return DB::transaction(function () use ($paymentEntry, $data) {
@@ -303,6 +314,7 @@ public function cancel(PaymentEntry $paymentEntry): PaymentEntry
         }
 
         $invoice->update([
+            'company_id' => $invoice->company_id,
             'paid_amount' => $newPaidAmount,
             'outstanding_amount' => $newOutstanding,
             'payment_status' => $newPaidAmount <= 0
@@ -331,31 +343,34 @@ private function createReverseJournalEntry(PaymentEntry $paymentEntry): JournalE
 {
     $amount = (float) $paymentEntry->paid_amount;
 
-    $journalEntry = JournalEntry::create([
-        'entry_number' => $this->generateJournalEntryNumber(),
-        'entry_date' => now()->toDateString(),
-        'total_debit' => $amount,
-        'total_credit' => $amount,
-        'status' => 'posted',
-        'created_by' => auth('api')->id(),
-        'posted_at' => now(),
-    ]);
+   $invoice = $paymentEntry->references->first()?->purchaseInvoice;
 
-    $journalEntry->lines()->createMany([
-        [
-            'account_id' => $paymentEntry->paid_from_account_id,
-            'debit' => $amount,
-            'credit' => 0,
-            'note' => 'Reverse Payment Entry: ' . $paymentEntry->series,
-        ],
-        [
-            'account_id' => $paymentEntry->payable_account_id,
-            'debit' => 0,
-            'credit' => $amount,
-            'note' => 'Reverse Payment Entry: ' . $paymentEntry->series,
-        ],
-    ]);
+$journalEntry = JournalEntry::create([
+    'company_id' => $invoice->company_id,
+'entry_number' => $this->generateJournalEntryNumber($invoice->company_id),
+    'entry_date' => now()->toDateString(),
+    'total_debit' => $amount,
+    'total_credit' => $amount,
+    'status' => 'posted',
+    'created_by' => auth('api')->id(),
+    'posted_at' => now(),
+]);
 
+   $journalEntry->lines()->create([
+    'company_id' => $journalEntry->company_id,
+    'account_id' => $paymentEntry->paid_from_account_id,
+    'debit' => $amount,
+    'credit' => 0,
+    'note' => 'Reverse Payment Entry: ' . $paymentEntry->series,
+]);
+
+$journalEntry->lines()->create([
+    'company_id' => $journalEntry->company_id,
+    'account_id' => $paymentEntry->payable_account_id,
+    'debit' => 0,
+    'credit' => $amount,
+    'note' => 'Reverse Payment Entry: ' . $paymentEntry->series,
+]);
     return $journalEntry;
 }
 public function delete(PaymentEntry $paymentEntry): void
