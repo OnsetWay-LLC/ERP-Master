@@ -9,9 +9,23 @@ class JournalEntryLine extends Model
 //كل سطر = حساب + مبلغ
 //debit أو credit
 {
-   protected $fillable = [
-        'company_id', 'journal_entry_id', 'account_id', 'debit', 'credit', 'note'
-    ];
+  protected $fillable = [
+    'company_id',
+    'journal_entry_id',
+    'account_id',
+    'party_type',
+    'party_id',
+    'debit',
+    'credit',
+    'note',
+];
+
+   
+
+     public function company()
+    {
+        return $this->belongsTo(Company::class);
+    }
    public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
@@ -21,4 +35,9 @@ class JournalEntryLine extends Model
     {
         return $this->belongsTo(ChartOfAccount::class, 'account_id');
     }
+    public function supplier()
+{
+    return $this->belongsTo(Supplier::class, 'party_id');
+}
+
 }

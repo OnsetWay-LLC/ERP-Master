@@ -53,4 +53,13 @@ public function childrenRecursive()
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+    public function paymentEntriesPaidFrom()
+{
+    return $this->hasMany(PaymentEntry::class, 'paid_from_account_id');
+}
+
+public function paymentEntriesPayable()
+{
+    return $this->hasMany(PaymentEntry::class, 'payable_account_id');
+}
 }

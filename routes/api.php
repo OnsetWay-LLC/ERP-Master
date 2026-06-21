@@ -37,6 +37,37 @@ use App\Http\Controllers\Api\EmployeeLeave\EmployeeLeaveController;
 use App\Http\Controllers\Api\SalesOrder\SalesOrderController;
 use App\Http\Controllers\Api\SalesInvoice\SalesInvoiceController;
 use App\Http\Controllers\Api\DiscountSetting\DiscountSettingController;
+use App\Http\Controllers\Api\DiscountApproval\DiscountApprovalController;
+use App\Http\Controllers\Api\Notification\NotificationController;
+use App\Http\Controllers\Api\PickList\PickListController;
+use App\Http\Controllers\Api\DeliveryNote\DeliveryNoteController;
+use App\Http\Controllers\Api\MonthlyDistribution\MonthlyDistributionController;
+use App\Http\Controllers\Api\SalesPerson\SalesPersonController;
+use App\Http\Controllers\Api\Reports\SalesPersonPerformanceReportController;
+use App\Http\Controllers\Api\Payroll\PayrollController;
+use App\Http\Controllers\Api\StockEntry\StockReportController;
+use App\Http\Controllers\Api\Reports\CustomerLedgerReportController;
+use App\Http\Controllers\Api\SalesPayment\SalesPaymentController;
+use App\Http\Controllers\Api\SalesReturn\SalesReturnController;
+use App\Http\Controllers\Api\Reports\AccountsReceivableReportController;
+use App\Http\Controllers\Api\Reports\SalesRegisterReportController;
+use App\Http\Controllers\Api\Reports\ItemWiseSalesRegisterReportController;
+use App\Http\Controllers\Api\Reports\SalesPaymentSummaryReportController;
+use App\Http\Controllers\Api\purchaseInvoice\PurchaseInvoiceController;
+use App\Http\Controllers\Api\Reports\PurchaseRegisterReportController;
+use App\Http\Controllers\Api\PaymentEntry\PaymentEntryController;
+use App\Http\Controllers\Api\PurchaseReturn\PurchaseReturnController;
+use App\Http\Controllers\Api\Reports\SupplierLedgerReportController;
+use App\Http\Controllers\Api\Reports\ItemWisePurchaseRegisterReportController;
+use App\Http\Controllers\Api\AssetCapitalization\AssetCapitalizationController;
+use App\Http\Controllers\Api\AssetValueAdjustment\AssetValueAdjustmentController;
+use App\Http\Controllers\Api\AssetRepair\AssetRepairController;
+use App\Http\Controllers\Api\AssetSale\AssetSaleController;
+use App\Http\Controllers\Api\AssetScrapping\AssetScrappingController;
+use App\Http\Controllers\Api\Reports\FixedAssetRegisterReportController;
+use App\Http\Controllers\Api\Reports\AssetDepreciationLedgerReportController;
+use App\Http\Controllers\Api\Reports\AssetDepreciationBalanceReportController;
+use App\Http\Controllers\Api\FinancialYear\FinancialYearController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -61,7 +92,10 @@ Route::middleware(['auth:api', 'permission:screen.company,api', 'locale'])
         Route::apiResource('/companies', CompanyController::class)
             ->except(['destroy']);
     });
-
+Route::post(
+    'payrolls/generate',
+    [PayrollController::class, 'generate']
+);
 Route::prefix('payroll-tax-settings')
     ->middleware(['auth:api', 'permission:screen.payroll_tax_settings,api', 'locale'])
     ->group(function () {
@@ -104,6 +138,7 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
         Route::get('/', [UserController::class, 'index']);
         Route::get('/employee-by-national-id/{nationalId}', [UserController::class, 'employeeByNationalId']);
         Route::post('/', [UserController::class, 'store']);
+        Route::put('/{user}', [UserController::class, 'update']);
         Route::get('/{user}', [UserController::class, 'show']);
         Route::delete('/{user}', [UserController::class, 'destroy']);
     });
@@ -193,7 +228,7 @@ Route::prefix('accounting/default-accounts')
 ->group(function () {
     Route::get('/', [CompanyAccountSettingController::class, 'show']);
     Route::post('/', [CompanyAccountSettingController::class, 'store']);
-    Route::put('/', [CompanyAccountSettingController::class, 'store']);
+    Route::put('/', [CompanyAccountSettingController::class, 'update']);
 });
  Route::prefix('tax-templates')
     ->middleware(['auth:api', 'permission:screen.tax,api', 'locale'])
@@ -203,6 +238,7 @@ Route::prefix('accounting/default-accounts')
     Route::get('/{id}', [TaxTemplateController::class, 'show']);
     Route::put('/{id}', [TaxTemplateController::class, 'update']);
     Route::delete('/{id}', [TaxTemplateController::class, 'destroy']);
+    Route::post('/{id}/restore', [TaxTemplateController::class, 'restore'])->withTrashed();
     });
 
     Route::prefix('inventory/material-requests')
@@ -217,14 +253,31 @@ Route::prefix('inventory/purchase-orders')
 ->middleware(['auth:api', 'permission:screen.purchase_orders,api', 'locale'])
 ->group(function () {
     Route::post('/', [PurchaseOrderController::class, 'store']);
-    Route::post('/{id}/submit', [PurchaseOrderController::class, 'submit']);
+        Route::get('/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
+        Route::put('/{purchaseOrder}', [PurchaseOrderController::class, 'update']);
+        Route::post('/{purchaseOrder}/submit', [PurchaseOrderController::class, 'submit']);
+        Route::post('/{purchaseOrder}/cancel', [PurchaseOrderController::class, 'cancel']);
+        Route::delete('/{purchaseOrder}', [PurchaseOrderController::class, 'destroy']);
 
 });
 Route::prefix('inventory/purchase-receipts')
 ->middleware(['auth:api', 'permission:screen.purchase_receipts,api', 'locale'])
 ->group(function () {
-    Route::post('/', [PurchaseReceiptController::class, 'store']);
-    Route::put('/{id}', [PurchaseReceiptController::class, 'update']);
+        Route::get('/',[PurchaseReceiptController::class, 'index']);
+        Route::post('/', [PurchaseReceiptController::class, 'store']);
+        Route::get('/{purchaseReceipt}', [PurchaseReceiptController::class, 'show']);
+        Route::put('/{purchaseReceipt}', [PurchaseReceiptController::class, 'update']);
+        Route::post('/{purchaseReceipt}/submit', [PurchaseReceiptController::class, 'submit']);
+        Route::post('/{purchaseReceipt}/cancel', [PurchaseReceiptController::class, 'cancel']);
+    });
+    Route::middleware(['auth:api', 'permission:screen.purchase_invoices', 'locale'])->group(function () {
+    Route::get('/purchase-invoices', [PurchaseInvoiceController::class, 'index']);
+    Route::post('/purchase-invoices', [PurchaseInvoiceController::class, 'store']);
+    Route::get('/purchase-invoices/{purchaseInvoice}', [PurchaseInvoiceController::class, 'show']);
+    Route::post('/purchase-invoices/{purchaseInvoice}/submit', [PurchaseInvoiceController::class, 'submit']);
+    Route::put( '/purchase-invoices/{id}', [PurchaseInvoiceController::class, 'update']);
+    Route::post('/purchase-invoices/{purchaseInvoice}/cancel', [PurchaseInvoiceController::class, 'cancel']);
+    Route::get('/purchase-invoices/{purchaseInvoice}/pdf', [PurchaseInvoiceController::class, 'pdf']);
 });
 Route::prefix('shifts')
     ->middleware(['auth:api', 'permission:screen.shifts,api', 'locale'])
@@ -240,6 +293,10 @@ Route::prefix('shifts')
 });
     Route::middleware(['auth:api', 'permission:screen.assets', 'locale'])->group(function () {
     Route::apiResource('asset-categories', AssetCategoryController::class);
+    Route::get(
+    '/assets/{id}/depreciation-journal-template',
+    [AssetController::class, 'depreciationJournalTemplate']
+);
 });
     Route::middleware(['auth:api', 'permission:screen.asset_items', 'locale'])->group(function () {
     Route::apiResource('asset-items', AssetItemController::class);
@@ -249,6 +306,7 @@ Route::middleware(['auth:api', 'permission:screen.asset_locations', 'locale'])->
 });
 Route::middleware(['auth:api', 'permission:screen.assets', 'locale'])->group(function () {
     Route::apiResource('assets', AssetController::class);
+    Route::post('assets/{asset}/submit', [AssetController::class, 'submit']);
 });
 Route::middleware(['auth:api', 'permission:screen.bank', 'locale'])->group(function () {
     Route::apiResource('banks', BankController::class);
@@ -265,6 +323,10 @@ Route::middleware(['auth:api', 'permission:screen.stock_entries', 'locale'])->gr
 
     Route::post('stock-entries/{id}/submit', [StockEntryController::class, 'submit']);
     Route::post('stock-entries/{id}/cancel', [StockEntryController::class, 'cancel']);
+    Route::get(
+    'stock-balance',
+    [StockReportController::class, 'stockBalance']
+);
 });
 Route::middleware(['auth:api', 'locale'])->group(function () {
     Route::get('journal-entries/accounts/dropdown', [JournalEntryController::class, 'accountsDropdown'])
@@ -314,35 +376,94 @@ Route::middleware(['auth:api', 'permission:screen.profit_and_loss', 'locale'])->
     Route::get('/reports/profit-loss', [ProfitLossController::class, 'report']);
     Route::get('/reports/profit-loss/pdf', [ProfitLossController::class, 'exportPdf']);
 });
-Route::prefix('sales-orders')
-    ->middleware(['auth:api', 'permission:screen.sales_orders,api', 'locale'])
+Route::middleware(['auth:api', 'permission:screen.sales_orders', 'locale'])
+    ->prefix('sales-orders')
     ->group(function () {
         Route::get('/', [SalesOrderController::class, 'index']);
-    Route::post('/', [SalesOrderController::class, 'store']);
-    Route::get('/{salesOrder}', [SalesOrderController::class, 'show']);
-    Route::put('/{salesOrder}', [SalesOrderController::class, 'update']);
-    Route::delete('/{salesOrder}', [SalesOrderController::class, 'destroy']);
-    Route::post('/{salesOrder}/submit', [SalesOrderController::class, 'submit']);// Draft -> Confirmed
-    Route::post('/{salesOrder}/process', [SalesOrderController::class, 'process']);// Confirmed -> In Process
-    Route::post('/{salesOrder}/transit', [SalesOrderController::class, 'transit']);// In Process -> In Transit
-    Route::post('/{salesOrder}/deliver', [SalesOrderController::class, 'deliver']);// In Transit -> Delivered
-    Route::post('/{salesOrder}/cancel', [SalesOrderController::class, 'cancel']);
-    });
+        Route::post('/', [SalesOrderController::class, 'store']);
+        Route::get('/{salesOrder}', [SalesOrderController::class, 'show']);
+        Route::put('/{salesOrder}', [SalesOrderController::class, 'update']);
+        Route::delete('/{salesOrder}', [SalesOrderController::class, 'destroy']);
 
-  Route::prefix('sales-invoices')
-    ->middleware(['auth:api', 'permission:screen.sales_invoices,api', 'locale'])
+        Route::post('/{salesOrder}/submit', [SalesOrderController::class, 'submit']);
+        Route::post('/{salesOrder}/cancel', [SalesOrderController::class, 'cancel']);
+    });
+Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale'])
+    ->prefix('pick-lists')
     ->group(function () {
-        Route::post('/', [SalesInvoiceController::class, 'store']); // حفظ الفاتورة مسودة (Draft)
-        Route::put('/{salesInvoice}', [SalesInvoiceController::class, 'update']);
-        Route::post('/{salesInvoice}/submit', [SalesInvoiceController::class, 'submit']); // الاعتماد النهائي والترحيل المحاسبي والمالي
-        Route::get('/{salesInvoice}/print-preview', [SalesInvoiceController::class, 'printPreview']); // معاينة الطباعة والتفقيط النصي
-        
-        // تم إزالة كلمة sales-invoices من هنا لأن الـ prefix يقوم بالمهمة
-        Route::get('/{salesInvoice}/preview', [SalesInvoiceController::class, 'showHtml']);
-        Route::get('/{salesInvoice}/pdf', [SalesInvoiceController::class, 'downloadPdf']);
-              Route::delete('/{salesInvoice}', [SalesInvoiceController::class, 'destroy']);
-
+        Route::get('/', [PickListController::class, 'index']);
+        Route::get('/{pickList}', [PickListController::class, 'show']);
+        Route::post('/{pickList}/cancel', [PickListController::class, 'cancel']);
     });
+    Route::middleware(['auth:api', 'permission:screen.delivery_notes', 'locale'])
+    ->prefix('delivery-notes')
+    ->group(function () {
+        Route::get('/', [DeliveryNoteController::class, 'index']);
+        Route::get('/{deliveryNote}', [DeliveryNoteController::class, 'show']);
+
+        Route::post('/from-pick-list/{pickList}', [DeliveryNoteController::class, 'storeFromPickList']);
+
+        Route::post('/{deliveryNote}/submit', [DeliveryNoteController::class, 'submit']);
+        Route::post('/{deliveryNote}/cancel', [DeliveryNoteController::class, 'cancel']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.monthly_distributions', 'locale'])
+        ->prefix('monthly-distributions')
+        ->group(function () {
+            Route::get('/', [MonthlyDistributionController::class, 'index']);
+            Route::post('/', [MonthlyDistributionController::class, 'store']);
+            Route::get('/{monthlyDistribution}', [MonthlyDistributionController::class, 'show']);
+            Route::put('/{monthlyDistribution}', [MonthlyDistributionController::class, 'update']);
+            Route::delete('/{monthlyDistribution}', [MonthlyDistributionController::class, 'destroy']);
+        });
+        Route::prefix('sales-persons')
+    ->middleware(['auth:api', 'permission:screen.sales_persons', 'locale'])
+    ->group(function () {
+
+        Route::get('/', [SalesPersonController::class, 'index']);
+        Route::post('/', [SalesPersonController::class, 'store']);
+        Route::post('post-commission', [SalesPersonController::class, 'postCommission']);
+        Route::post('{id}/restore', [SalesPersonController::class, 'restore'])->withTrashed();
+        Route::get('{salesPerson}', [SalesPersonController::class, 'show']);
+        Route::put('{salesPerson}', [SalesPersonController::class, 'update']);
+        Route::delete('{salesPerson}', [SalesPersonController::class, 'destroy']);
+    });
+        
+ Route::middleware(['auth:api', 'locale'])->group(function () {
+    Route::prefix('sales-invoices')
+        ->middleware('permission:screen.sales_invoices')
+        ->group(function () {
+            Route::post('/', [SalesInvoiceController::class, 'store']);
+            Route::put('/{salesInvoice}', [SalesInvoiceController::class, 'update']);
+            Route::post('/{salesInvoice}/submit', [SalesInvoiceController::class, 'submit']);
+            Route::get('/{salesInvoice}/print-preview', [SalesInvoiceController::class, 'printPreview']);
+            Route::get('/{salesInvoice}/html', [SalesInvoiceController::class, 'showHtml']);
+            Route::get('/{salesInvoice}/pdf', [SalesInvoiceController::class, 'downloadPdf']);
+            Route::post('/{deliveryNote}/create-sales-invoice',[SalesInvoiceController::class, 'createFromDeliveryNote']
+);
+            Route::delete('/{salesInvoice}', [SalesInvoiceController::class, 'destroy']);
+        });
+        Route::middleware(['auth:api','permission:screen.sales_payments', 'locale'])->group(function () {
+        Route::apiResource('sales-payments', SalesPaymentController::class)
+    ->only(['index', 'store', 'show']);
+
+Route::post('sales-payments/{salesPayment}/submit', [SalesPaymentController::class, 'submit']);
+Route::post('sales-payments/{salesPayment}/cancel', [SalesPaymentController::class, 'cancel']);
+        });
+
+       Route::middleware(['auth:api', 'permission:screen.sales_person_performance_report', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/sales-person-performance', [SalesPersonPerformanceReportController::class, 'index']);
+        Route::get('/sales-person-performance/pdf', [SalesPersonPerformanceReportController::class, 'pdf']);
+    });
+    Route::prefix('discount-approvals')
+        ->middleware('role:CFO')
+        ->group(function () {
+            Route::get('/', [DiscountApprovalController::class, 'index']);
+            Route::post('/{discountApprovalRequest}/respond', [DiscountApprovalController::class, 'respond']);
+        });
+});
     Route::middleware([ 'auth:api', 'permission:screen.discount_settings', 'locale'])
     ->prefix('discount-settings')->group(function () {
     Route::post('/', [DiscountSettingController::class, 'store']);
@@ -351,3 +472,182 @@ Route::prefix('sales-orders')
     Route::delete('/{discountSetting}', [DiscountSettingController::class, 'destroy']);
 
 });
+Route::middleware(['auth:api', 'locale'])->prefix('notifications')->group(function () {
+    Route::get('/', [NotificationController::class, 'index']);
+    Route::get('/unread', [NotificationController::class, 'unread']);
+    Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
+});
+Route::middleware(['auth:api','permission:screen.financial_reports','locale'])
+->prefix('reports')->group(function () {
+Route::get( '/customer-ledger/pdf', [CustomerLedgerReportController::class, 'pdf']);
+});
+
+Route::middleware(['auth:api','permission:screen.supplier_ledger_report','locale'])
+->prefix('reports')->group(function () {
+Route::get( '/supplier-ledger/pdf', [SupplierLedgerReportController::class, 'pdf']);
+});
+
+ Route::middleware([ 'auth:api', 'permission:screen.sales_returns', 'locale'])
+    ->prefix('sales-returns')->group(function () {
+Route::post('/', [SalesReturnController::class, 'store']);
+Route::get('/{salesReturn}', [SalesReturnController::class, 'show']);
+Route::put('/{salesReturn}', [SalesReturnController::class, 'update']);
+Route::post('/{salesReturn}/submit', [SalesReturnController::class, 'submit']);
+Route::post('/{salesReturn}/cancel', [SalesReturnController::class, 'cancel']);
+Route::delete('/{salesReturn}', [SalesReturnController::class, 'destroy']);
+});
+
+Route::middleware(['auth:api', 'permission:screen.AccountsReceivableReport', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/accounts-receivable/pdf', [AccountsReceivableReportController::class, 'pdf']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.SalesRegisterReport', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/sales-register/pdf', [SalesRegisterReportController::class, 'pdf']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.ItemWiseSalesRegisterReport', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/item-wise-sales-register/pdf', [ItemWiseSalesRegisterReportController::class, 'pdf']);
+    });
+    Route::middleware(['auth:api', 'permission:screen.sales_payment_summary_report', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/sales-payment-summary/pdf', [SalesPaymentSummaryReportController::class, 'pdf']);
+    });
+    Route::middleware(['auth:api', 'permission:screen.purchase_reports', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/purchase-register/pdf', [PurchaseRegisterReportController::class, 'pdf']);
+    });
+    
+    Route::middleware(['auth:api','permission:screen.purchase_payments', 'locale'])
+    ->prefix('payment-entries')
+    ->group(function () {
+        Route::post('/from-purchase-invoice', [PaymentEntryController::class, 'storeFromPurchaseInvoice']);
+
+        Route::put('/{paymentEntry}', [PaymentEntryController::class, 'update']);
+
+        Route::post('/{paymentEntry}/submit', [PaymentEntryController::class, 'submit']);
+        Route::post('/{paymentEntry}/cancel', [PaymentEntryController::class, 'cancel']);
+
+        Route::get('/{paymentEntry}', [PaymentEntryController::class, 'show']);
+        Route::get('/{paymentEntry}/print', [PaymentEntryController::class, 'print']);
+        Route::delete('/{paymentEntry}', [PaymentEntryController::class, 'destroy']);
+    });
+  Route::middleware([ 'auth:api', 'permission:screen.purchase_returns', 'locale'])->prefix('purchase-returns')->group(function () {
+    Route::get('/from-purchase-invoice/{purchaseInvoice}', [PurchaseReturnController::class, 'getDataFromPurchaseInvoice']);
+    Route::post( '/',  [PurchaseReturnController::class, 'store']);
+    Route::put('/{purchaseReturn}', [PurchaseReturnController::class, 'update'] );
+    Route::get( '/{purchaseReturn}', [PurchaseReturnController::class, 'show']);
+    Route::post('/{purchaseReturn}/submit', [PurchaseReturnController::class, 'submit']);
+    Route::post('/{purchaseReturn}/cancel', [PurchaseReturnController::class, 'cancel'] );
+    Route::delete( '/{purchaseReturn}',[PurchaseReturnController::class, 'destroy']); 
+});
+Route::get( '/reports/item-wise-purchase-register/pdf', [ItemWisePurchaseRegisterReportController::class, 'pdf'])->middleware([  'auth:api',  'permission:screen.item_wise_purchase_register_report', 'locale']);
+
+Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'locale'])
+    ->prefix('asset-capitalizations')
+    ->group(function () {
+        Route::get('/lookups/target-assets', [AssetCapitalizationController::class, 'targetAssets']);
+        Route::get('/lookups/consumed-assets', [AssetCapitalizationController::class, 'consumedAssets']);
+
+        Route::get('/', [AssetCapitalizationController::class, 'index']);
+        Route::post('/', [AssetCapitalizationController::class, 'store']);
+        Route::get('/{assetCapitalization}', [AssetCapitalizationController::class, 'show']);
+        Route::put('/{assetCapitalization}', [AssetCapitalizationController::class, 'update']);
+        Route::post('/{assetCapitalization}/submit', [AssetCapitalizationController::class, 'submit']);
+        Route::delete('/{assetCapitalization}', [AssetCapitalizationController::class, 'destroy']);
+    });
+    Route::middleware(['auth:api', 'permission:screen.asset_value_adjustments', 'locale'])
+    ->prefix('asset-value-adjustments')
+    ->group(function () {
+        Route::get('/lookups/assets', [AssetValueAdjustmentController::class, 'availableAssets']);
+        Route::get('/lookups/difference-accounts', [AssetValueAdjustmentController::class, 'differenceAccounts']);
+
+        Route::get('/', [AssetValueAdjustmentController::class, 'index']);
+        Route::post('/', [AssetValueAdjustmentController::class, 'store']);
+        Route::get('/{assetValueAdjustment}', [AssetValueAdjustmentController::class, 'show']);
+        Route::put('/{assetValueAdjustment}', [AssetValueAdjustmentController::class, 'update']);
+        Route::post('/{assetValueAdjustment}/submit', [AssetValueAdjustmentController::class, 'submit']);
+        Route::delete('/{assetValueAdjustment}', [AssetValueAdjustmentController::class, 'destroy']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.asset_repair', 'locale'])
+    ->prefix('asset-repairs')
+    ->group(function () {
+        Route::get('/lookups/assets', [AssetRepairController::class, 'availableAssets']);
+        Route::get('/lookups/purchase-invoices', [AssetRepairController::class, 'purchaseInvoices']);
+
+        Route::get('/', [AssetRepairController::class, 'index']);
+        Route::post('/', [AssetRepairController::class, 'store']);
+        Route::get('/{assetRepair}', [AssetRepairController::class, 'show']);
+        Route::put('/{assetRepair}', [AssetRepairController::class, 'update']);
+        Route::post('/{assetRepair}/submit', [AssetRepairController::class, 'submit']);
+        Route::delete('/{assetRepair}', [AssetRepairController::class, 'destroy']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.asset_Sale', 'locale'])
+    ->prefix('asset-sales')
+    ->group(function () {
+        Route::get('/lookups/assets', [AssetSaleController::class, 'availableAssets']);
+    Route::get('/lookups/warehouses', [AssetSaleController::class, 'warehouses']);
+    Route::get('/lookups/accounts', [AssetSaleController::class, 'accounts']);
+
+    Route::post('/create-invoice', [AssetSaleController::class, 'createInvoice']);
+
+    Route::get('/', [AssetSaleController::class, 'index']);
+    Route::post('/', [AssetSaleController::class, 'store']);
+
+    Route::get('/{assetSale}', [AssetSaleController::class, 'show']);
+    Route::put('/{assetSale}', [AssetSaleController::class, 'update']);
+    Route::post('/{assetSale}/submit', [AssetSaleController::class, 'submit']);
+    Route::delete('/{assetSale}', [AssetSaleController::class, 'destroy']);
+    });
+   
+    Route::middleware(['auth:api', 'permission:screen.assets.scrappings', 'locale'])
+    ->prefix('asset-scrappings')
+    ->group(function () {
+        Route::get('/lookups/assets', [AssetScrappingController::class, 'availableAssets']);
+
+        Route::get('/', [AssetScrappingController::class, 'index']);
+        Route::post('/', [AssetScrappingController::class, 'store']);
+        Route::get('/{assetScrapping}', [AssetScrappingController::class, 'show']);
+        Route::put('/{assetScrapping}', [AssetScrappingController::class, 'update']);
+        Route::post('/{assetScrapping}/submit', [AssetScrappingController::class, 'submit']);
+        Route::delete('/{assetScrapping}', [AssetScrappingController::class, 'destroy']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.fixed.asset.register.report', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/fixed-asset-register/pdf', [FixedAssetRegisterReportController::class, 'pdf']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.asset.depreciation.ledger.report', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/asset-depreciation-ledger/pdf', [AssetDepreciationLedgerReportController::class, 'pdf']);
+    });
+    Route::middleware(['auth:api', 'permission:screen.asset.depreciation.balance.report', 'locale'])
+    ->prefix('reports')
+    ->group(function () {
+        Route::get('/asset-depreciation-balance/pdf', [AssetDepreciationBalanceReportController::class, 'pdf']);
+    });
+
+    Route::middleware(['auth:api', 'permission:screen.account_closing', 'locale'])
+    ->prefix('financial-years')
+    ->group(function () {
+        Route::get('/', [FinancialYearController::class, 'index']);
+        Route::post('/', [FinancialYearController::class, 'store']);
+        Route::get('/{financialYear}', [FinancialYearController::class, 'show']);
+        Route::put('/{financialYear}', [FinancialYearController::class, 'update']);
+        Route::post('/{financialYear}/close', [FinancialYearController::class, 'close']);
+        Route::post('/{financialYear}/reopen', [FinancialYearController::class, 'reopen']);
+        Route::delete('/{financialYear}', [FinancialYearController::class, 'destroy']);
+    });

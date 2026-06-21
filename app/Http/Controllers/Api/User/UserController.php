@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\User;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\User\StoreUserRequest;
+use App\Http\Requests\User\UpdateUserRequest;
 use App\Http\Resources\User\UserResource;
 use App\Services\User\UserService;
 use Illuminate\Http\JsonResponse;
@@ -77,6 +78,15 @@ class UserController extends Controller
                 'company_email' => $employee->company_email,
                 'has_user' => $employee->user()->exists(),
             ],
+        ]);
+    }
+    public function update(UpdateUserRequest $request, User $user): JsonResponse
+    {
+        $updatedUser = $this->service->update($user, $request->validated());
+
+        return response()->json([
+            'message' => 'User updated successfully.',
+            'data' => new UserResource($updatedUser),
         ]);
     }
 }

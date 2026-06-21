@@ -28,4 +28,6 @@ class StoreEmployeeLeaveRequest extends FormRequest
             'deduct_from_salary' => ['nullable', 'boolean'],
         ];
     }
+
+   
 }

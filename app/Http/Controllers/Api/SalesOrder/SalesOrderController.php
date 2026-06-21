@@ -14,8 +14,7 @@ class SalesOrderController extends Controller
 {
     public function __construct(
         private readonly SalesOrderService $service
-    ) {
-    }
+    ) {}
 
     public function index(): JsonResponse
     {
@@ -54,7 +53,8 @@ class SalesOrderController extends Controller
             'data' => new SalesOrderResource($order),
         ]);
     }
-public function destroy(SalesOrder $salesOrder): JsonResponse
+
+    public function destroy(SalesOrder $salesOrder): JsonResponse
     {
         $this->service->delete($salesOrder);
 
@@ -62,46 +62,13 @@ public function destroy(SalesOrder $salesOrder): JsonResponse
             'message' => 'Sales order deleted successfully.',
         ]);
     }
-    // Draft -> Confirmed
+
     public function submit(SalesOrder $salesOrder): JsonResponse
     {
         $order = $this->service->submit($salesOrder);
 
         return response()->json([
-            'message' => 'Sales order confirmed successfully.',
-            'data' => new SalesOrderResource($order),
-        ]);
-    }
-
-    // Confirmed -> In Process
-    public function process(SalesOrder $salesOrder): JsonResponse
-    {
-        $order = $this->service->process($salesOrder);
-
-        return response()->json([
-            'message' => 'Sales order is now in process.',
-            'data' => new SalesOrderResource($order),
-        ]);
-    }
-
-    // In Process -> In Transit
-    public function transit(SalesOrder $salesOrder): JsonResponse
-    {
-        $order = $this->service->transit($salesOrder);
-
-        return response()->json([
-            'message' => 'Sales order is now in transit.',
-            'data' => new SalesOrderResource($order),
-        ]);
-    }
-
-    // In Transit -> Delivered
-    public function deliver(SalesOrder $salesOrder): JsonResponse
-    {
-        $order = $this->service->deliver($salesOrder);
-
-        return response()->json([
-            'message' => 'Sales order delivered successfully.',
+            'message' => 'Sales order submitted successfully. Stock reserved and pick list created.',
             'data' => new SalesOrderResource($order),
         ]);
     }

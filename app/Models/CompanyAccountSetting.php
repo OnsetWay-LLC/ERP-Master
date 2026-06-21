@@ -24,7 +24,10 @@ class CompanyAccountSetting extends Model
     'default_indirect_expense_account_id',
 
     'default_inventory_account_id',
+    'default_sales_tax_account_id',
+    'default_purchase_tax_account_id',
     'default_payment_discount_account_id',
+
     'accumulated_depreciation_account_id',
     'depreciation_expense_account_id',
     'gain_loss_asset_disposal_account_id',

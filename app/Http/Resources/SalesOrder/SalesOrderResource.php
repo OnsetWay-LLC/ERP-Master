@@ -37,6 +37,13 @@ class SalesOrderResource extends JsonResource
                 'id' => $this->creator?->id,
                 'name' => $this->creator?->name,
             ],
+            'pick_list' => $this->whenLoaded('pickList', function () {
+    return [
+        'id' => $this->pickList?->id,
+        'pick_list_number' => $this->pickList?->pick_list_number,
+        'status' => $this->pickList?->status,
+    ];
+}),
 
             'created_at' => $this->created_at?->format('Y-m-d H:i'),
         ];

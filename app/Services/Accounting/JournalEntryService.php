@@ -6,6 +6,7 @@ use App\Models\ChartOfAccount;
 use App\Models\GeneralLedger;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\Asset;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -29,44 +30,64 @@ class JournalEntryService
             ->findOrFail($id);
     }
 
-    public function create(array $data, int $companyId, int $userId): JournalEntry
-    {
-        return DB::transaction(function () use ($data, $companyId, $userId) {
-            $this->validateLines($data['lines'], $companyId);
+    
+   public function create(array $data, int $companyId, int $userId): JournalEntry
+{
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $companyId,
+            $data['entry_date'],
+            'create'
+        );
 
-            $totalDebit = collect($data['lines'])->sum(fn ($line) => (float) ($line['debit'] ?? 0));
-            $totalCredit = collect($data['lines'])->sum(fn ($line) => (float) ($line['credit'] ?? 0));
+    return DB::transaction(function () use ($data, $companyId, $userId) {
 
-            $this->ensureBalanced($totalDebit, $totalCredit);
+        $this->validateLines($data['lines'], $companyId);
 
-            $entry = JournalEntry::create([
-                'company_id' => $companyId,
-                'entry_number' => $this->generateEntryNumber($companyId),
-                'entry_date' => $data['entry_date'],
-                'description' => $data['description'] ?? null,
-                'status' => 'draft',
-                'created_by' => $userId,
-                'total_debit' => $totalDebit,
-                'total_credit' => $totalCredit,
+        $totalDebit = collect($data['lines'])
+            ->sum(fn($line) => (float)($line['debit'] ?? 0));
+
+        $totalCredit = collect($data['lines'])
+            ->sum(fn($line) => (float)($line['credit'] ?? 0));
+
+        $this->ensureBalanced($totalDebit, $totalCredit);
+
+        $entry = JournalEntry::create([
+            'company_id'   => $companyId,
+            'entry_number' => $this->generateEntryNumber($companyId),
+            'entry_date'   => $data['entry_date'],
+            'description'  => $data['description'] ?? null,
+            'status'       => 'draft',
+            'created_by'   => $userId,
+            'total_debit'  => $totalDebit,
+            'total_credit' => $totalCredit,
+            'asset_id'     => $data['asset_id'] ?? null,
+            'source_type'  => $data['source_type'] ?? 'manual',
+        ]);
+
+        foreach ($data['lines'] as $line) {
+            JournalEntryLine::create([
+                'company_id'      => $companyId,
+                'journal_entry_id'=> $entry->id,
+                'account_id'      => $line['account_id'],
+                'debit'           => $line['debit'] ?? 0,
+                'credit'          => $line['credit'] ?? 0,
+                'note'            => $line['note'] ?? null,
             ]);
+        }
 
-            foreach ($data['lines'] as $line) {
-                JournalEntryLine::create([
-                    'company_id' => $companyId,
-                    'journal_entry_id' => $entry->id,
-                    'account_id' => $line['account_id'],
-                    'debit' => $line['debit'] ?? 0,
-                    'credit' => $line['credit'] ?? 0,
-                    'note' => $line['note'] ?? null,
-                ]);
-            }
-
-            return $entry->fresh(['creator', 'lines.account']);
-        });
-    }
+        return $entry->fresh(['creator', 'lines.account']);
+    });
+}
 
     public function updateDraft(int $companyId, int $id, array $data): JournalEntry
     {
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $companyId,
+            $data['entry_date'],
+            'create'
+        );
         return DB::transaction(function () use ($companyId, $id, $data) {
             $user = auth()->user();
 
@@ -95,6 +116,8 @@ class JournalEntryService
                 'description' => $data['description'] ?? null,
                 'total_debit' => $totalDebit,
                 'total_credit' => $totalCredit,
+                'asset_id' => $data['asset_id'] ?? $entry->asset_id,
+'source_type' => $data['source_type'] ?? $entry->source_type,
             ]);
 
             $entry->lines()->delete();
@@ -136,7 +159,37 @@ class JournalEntryService
             $entry->delete();
         });
     }
+private function applyAssetDepreciationIfNeeded(JournalEntry $entry): void
+{
+    if ($entry->source_type !== 'asset_depreciation' || ! $entry->asset_id) {
+        return;
+    }
 
+    $asset = Asset::query()
+        ->where('company_id', $entry->company_id)
+        ->where('id', $entry->asset_id)
+        ->where('status', 'submitted')
+        ->lockForUpdate()
+        ->first();
+
+    if (! $asset) {
+        throw new InvalidArgumentException('Invalid submitted asset selected for depreciation.');
+    }
+
+    $depreciationAmount = (float) $entry->lines->sum('debit');
+
+    if ($depreciationAmount <= 0) {
+        throw new InvalidArgumentException('Depreciation amount must be greater than zero.');
+    }
+
+    $asset->update([
+        'opening_accumulated_depreciation' =>
+            round((float) ($asset->opening_accumulated_depreciation ?? 0) + $depreciationAmount, 2),
+
+        'opening_number_of_booked_depreciations' =>
+            ((int) ($asset->opening_number_of_booked_depreciations ?? 0)) + 1,
+    ]);
+}
     public function submit(int $companyId, int $id): JournalEntry
     {
         return DB::transaction(function () use ($companyId, $id) {
@@ -188,7 +241,7 @@ class JournalEntryService
                 'status' => 'posted',
                 'posted_at' => now(),
             ]);
-
+$this->applyAssetDepreciationIfNeeded($entry);
             return $entry->fresh(['creator', 'lines.account']);
         });
     }
@@ -250,7 +303,7 @@ class JournalEntryService
                 'status' => 'cancelled',
                 'cancelled_at' => now(),
             ]);
-
+$this->reverseAssetDepreciationIfNeeded($originalEntry);
             return $originalEntry->fresh([
                 'creator',
                 'lines.account',
@@ -258,7 +311,39 @@ class JournalEntryService
             ]);
         });
     }
+private function reverseAssetDepreciationIfNeeded(JournalEntry $entry): void
+{
+    if ($entry->source_type !== 'asset_depreciation' || ! $entry->asset_id) {
+        return;
+    }
 
+    $asset = Asset::query()
+        ->where('company_id', $entry->company_id)
+        ->where('id', $entry->asset_id)
+        ->lockForUpdate()
+        ->first();
+
+    if (! $asset) {
+        throw new InvalidArgumentException('Invalid asset selected for depreciation reversal.');
+    }
+
+    $depreciationAmount = (float) $entry->lines->sum('debit');
+
+    $newAccumulated = max(
+        round((float) ($asset->opening_accumulated_depreciation ?? 0) - $depreciationAmount, 2),
+        0
+    );
+
+    $newBookedCount = max(
+        ((int) ($asset->opening_number_of_booked_depreciations ?? 0)) - 1,
+        0
+    );
+
+    $asset->update([
+        'opening_accumulated_depreciation' => $newAccumulated,
+        'opening_number_of_booked_depreciations' => $newBookedCount,
+    ]);
+}
     public function getAccountsDropdown(int $companyId)
     {
         return ChartOfAccount::query()

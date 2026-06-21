@@ -19,9 +19,6 @@ class StoreSupplierRequest extends FormRequest
             'supplier_name_ar' => ['required', 'string', 'max:255'],
             'supplier_name_en' => ['required', 'string', 'max:255'],
 
-            'first_name' => ['nullable', 'string', 'max:100'],
-            'last_name' => ['nullable', 'string', 'max:100'],
-
             'email' => ['nullable', 'email'],
             'mobile_number' => ['nullable', 'string', 'max:30'],
 
@@ -36,6 +33,7 @@ class StoreSupplierRequest extends FormRequest
                 'string',
                 'in:' . implode(',', array_keys(config('company.countries')))
             ],
+            'opening_balance' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

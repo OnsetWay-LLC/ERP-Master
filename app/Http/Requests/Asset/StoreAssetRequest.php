@@ -9,12 +9,12 @@ class StoreAssetRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->can('screen.assets');
+        return auth('api')->user()?->can('screen.assets');
     }
 
     public function rules(): array
     {
-        $companyId = 1;
+        $companyId = auth('api')->user()->company_id ?? 1;
 
         return [
             'asset_item_id' => [
@@ -35,28 +35,33 @@ class StoreAssetRequest extends FormRequest
                     ->whereNull('deleted_at'),
             ],
 
-            'asset_name_ar' => ['required', 'string', 'max:255'],
-            'asset_name_en' => ['required', 'string', 'max:255'],
-
             'asset_type' => [
                 'required',
-                Rule::in([
-                    'existing_asset',
-                    'composite_asset',
-                    'composite_component',
-                ]),
+                Rule::in(['existing_asset', 'composite_asset', 'composite_component']),
             ],
 
-            'purchase_date' => ['required', 'date'],
+            'purchase_invoice_id' => [
+                'required_if:asset_type,composite_component',
+                'nullable',
+                'integer',
+                Rule::exists('purchase_invoices', 'id')
+                    ->where('company_id', $companyId),
+            ],
+
+            'purchase_date' => [
+                'required_unless:asset_type,composite_component',
+                'nullable',
+                'date',
+            ],
 
             'available_for_use_date' => [
                 'required',
                 'date',
-                'after_or_equal:purchase_date',
             ],
 
             'net_purchase_amount' => [
-                'required',
+                'required_if:asset_type,existing_asset',
+                'nullable',
                 'numeric',
                 'min:0.01',
             ],
@@ -73,11 +78,16 @@ class StoreAssetRequest extends FormRequest
                 'min:0',
             ],
 
-            'purchase_receipt_id' => [
-                'required_if:asset_type,composite_component',
+            'opening_accumulated_depreciation' => [
+                'nullable',
+                'numeric',
+                'min:0',
+            ],
+
+            'opening_number_of_booked_depreciations' => [
                 'nullable',
                 'integer',
-                'exists:purchase_receipts,id',
+                'min:0',
             ],
         ];
     }

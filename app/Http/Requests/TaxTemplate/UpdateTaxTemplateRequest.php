@@ -36,6 +36,7 @@ class UpdateTaxTemplateRequest extends FormRequest
                 Rule::exists('chart_of_accounts', 'id')
                     ->where('company_id', 1)
                       ->whereIn('account_type', ['input_tax', 'output_tax'])
+                      ->where('account_level','child')
                     ->whereNull('deleted_at'),
             ],
 

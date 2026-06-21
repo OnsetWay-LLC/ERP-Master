@@ -15,9 +15,6 @@ class SupplierResource extends JsonResource
             'supplier_name_ar' => $this->supplier_name_ar,
             'supplier_name_en' => $this->supplier_name_en,
 
-            'first_name' => $this->first_name,
-            'last_name' => $this->last_name,
-
             'email' => $this->email,
             'mobile_number' => $this->mobile_number,
 
@@ -27,7 +24,8 @@ class SupplierResource extends JsonResource
             'city' => $this->city,
             'state_province' => $this->state_province,
             'country' => $this->country,
-
+      'opening_balance' => (float) $this->opening_balance,
+'opening_balance_journal_entry_id' => $this->opening_balance_journal_entry_id,
             'created_by' => $this->creator?->name,
             'created_at' => $this->created_at,
         ];

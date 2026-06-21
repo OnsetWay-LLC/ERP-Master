@@ -111,7 +111,42 @@ class CompanyAccountSettingService
             );
         });
     }
+public function update(array $data, int $companyId): CompanyAccountSetting
+    {
+        return DB::transaction(function () use ($data, $companyId) {
+            foreach ($data as $key => $accountId) {
+                if (! $accountId) {
+                    continue;
+                }
 
+                $allowedTypes = $this->allowedTypes[$key] ?? null;
+
+                if (! $allowedTypes) {
+                    throw new InvalidArgumentException("Invalid default account field: {$key}");
+                }
+
+                $account = ChartOfAccount::query()
+                    ->where('company_id', $companyId)
+                    ->where('id', $accountId)
+                    ->whereIn('account_type', $allowedTypes)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->first();
+
+                if (! $account) {
+                    throw new InvalidArgumentException(
+                        "Invalid account selected for {$key}. Account must be an active child account with one of these types: "
+                        . implode(', ', $allowedTypes)
+                    );
+                }
+            }
+
+            return CompanyAccountSetting::updateOrCreate(
+                ['company_id' => $companyId],
+                $data
+            );
+        });
+    }
     public function get(int $companyId): ?CompanyAccountSetting
     {
         return CompanyAccountSetting::query()

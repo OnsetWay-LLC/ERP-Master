@@ -12,9 +12,9 @@ class LoginService
     {
         $login = $data['login'];
 
-        $user = User::where('username', $login)
-            ->orWhere('email', $login)
-            ->first();
+       $user = User::where('email', $login)
+    ->orWhere('username', $login)
+    ->first();
 
         if (! $user) {
             abort(401, 'Invalid email/username or password.');
@@ -23,7 +23,9 @@ class LoginService
         if (! $user->is_active) {
             abort(403, 'Your account is inactive.');
         }
-
+if ($user->username !== $login && $user->email !== $login) {
+    abort(401, 'Invalid email/username or password.');
+}
         if ($user->locked_until && now()->lessThan($user->locked_until)) {
             abort(403, 'Your account is locked. Try again after 5 minutes.');
         }

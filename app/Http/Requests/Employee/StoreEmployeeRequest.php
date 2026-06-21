@@ -68,8 +68,8 @@ class StoreEmployeeRequest extends FormRequest
                 'max:34',
             ],
 
-            'salary.social_security_deduction' => ['nullable', 'numeric', 'min:0'],
-            'salary.insurance_deduction' => ['nullable', 'numeric', 'min:0'],
+            'salary.social_security_deduction' => ['required', 'numeric', 'min:0'],
+            'salary.insurance_deduction' => ['required', 'numeric', 'min:0'],
             'salary.effective_from' => ['nullable', 'date'],
             'leave_balances' => ['nullable', 'array'],
 
@@ -77,10 +77,13 @@ class StoreEmployeeRequest extends FormRequest
 'leave_balances.*.name_ar' => ['required_with:leave_balances', 'string', 'max:255'],
 'leave_balances.*.name_en' => ['required_with:leave_balances', 'string', 'max:255'],
 'leave_balances.*.total_days' => ['required_with:leave_balances', 'numeric', 'min:0'],
-            'allowances' => ['nullable', 'array'],
-            'allowances.*.name_ar' => ['required_with:allowances', 'string', 'max:255'],
-            'allowances.*.name_en' => ['required_with:allowances', 'string', 'max:255'],
-            'allowances.*.amount' => ['required_with:allowances', 'numeric', 'min:0'],
+           'allowances' => ['nullable', 'array'],
+
+'allowances.*' => ['nullable', 'array'],
+
+'allowances.*.name_ar' => ['nullable', 'string', 'max:255'],
+'allowances.*.name_en' => ['nullable', 'string', 'max:255'],
+'allowances.*.amount' => ['nullable', 'numeric', 'min:0'],
 
             'shift_ids' => ['nullable', 'array'],
             'shift_ids.*' => ['integer', 'exists:shifts,id'],
@@ -100,4 +103,5 @@ class StoreEmployeeRequest extends FormRequest
             'educations.*.major_en' => ['nullable', 'string', 'max:255'],
         ];
     }
+   
 }

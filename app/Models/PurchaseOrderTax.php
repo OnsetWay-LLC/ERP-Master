@@ -6,8 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class PurchaseOrderTax extends Model
 {
-    protected $fillable = [
+   protected $fillable = [
         'purchase_order_id',
+        'tax_template_id',
+        'tax_template_line_id',
+        'title',
         'type',
         'account_id',
         'tax_rate',

@@ -11,15 +11,50 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('purchase_payments', function (Blueprint $table) {
+        Schema::create('payment_entries', function (Blueprint $table) {
     $table->id();
 
-    $table->foreignId('purchase_invoice_id')->constrained()->cascadeOnDelete();
+    $table->string('series')->unique();
 
-    $table->decimal('amount', 18, 2);
-    $table->date('payment_date');
+    $table->date('posting_date');
 
-    $table->string('payment_method'); // cash, bank
+    $table->foreignId('supplier_id')
+        ->constrained('suppliers');
+
+    $table->enum('payment_mode', [
+        'cash',
+        'bank'
+    ]);
+
+    $table->foreignId('paid_from_account_id')
+        ->constrained('chart_of_accounts');
+
+    $table->foreignId('payable_account_id')
+        ->constrained('chart_of_accounts');
+
+    $table->decimal('paid_amount', 18, 2);
+
+    $table->string('reference_no')->nullable();
+
+    $table->date('reference_date')->nullable();
+
+    $table->text('remarks')->nullable();
+
+    $table->enum('status', [
+        'draft',
+        'submitted',
+        'cancelled'
+    ])->default('draft');
+
+    $table->foreignId('journal_entry_id')
+        ->nullable()
+        ->constrained('journal_entries');
+
+    $table->foreignId('created_by')
+        ->constrained('users');
+
+    $table->timestamp('submitted_at')->nullable();
+    $table->timestamp('cancelled_at')->nullable();
 
     $table->timestamps();
 });

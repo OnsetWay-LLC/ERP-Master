@@ -155,4 +155,22 @@ public function getActiveForDropdown()
         ->orderBy('name_en')
         ->get();
 }
+public function getItemsForDropdown()
+{
+    return Item::query()
+        ->whereNull('deleted_at')
+        ->where('status', 'active')
+        ->select(
+            'id',
+            'item_code',
+            'name_ar',
+            'name_en',
+            'barcode',
+            'purchase_price',
+            'selling_price',
+            'status'
+        )
+        ->orderBy('name_en')
+        ->get();
+}
 }

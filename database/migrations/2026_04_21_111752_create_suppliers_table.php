@@ -19,8 +19,7 @@ return new class extends Migration
 
             $table->string('supplier_name_ar');
             $table->string('supplier_name_en');
-            $table->string('first_name')->nullable();
-            $table->string('last_name')->nullable();
+            
 
             $table->string('email')->nullable();
             $table->string('mobile_number')->nullable();
@@ -31,7 +30,12 @@ return new class extends Migration
             $table->string('city')->nullable();
             $table->string('state_province')->nullable();
             $table->string('country')->nullable();
-
+              $table->decimal('opening_balance', 15, 2)->default(0);
+               $table->foreignId('opening_balance_journal_entry_id')
+            ->nullable()
+            ->constrained('journal_entries')
+            ->noActionOnDelete();
+   
             $table->foreignId('created_by')
                 ->nullable()
                 ->constrained('users')
@@ -39,7 +43,8 @@ return new class extends Migration
 
             $table->timestamps();
             $table->softDeletes();
-        });
+    
+    });
     }
 
     public function down(): void

@@ -9,12 +9,12 @@ class UpdateAssetRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->user()->can('screen.assets');
+        return auth('api')->user()?->can('screen.assets');
     }
 
     public function rules(): array
     {
-        $companyId = 1;
+        $companyId = auth('api')->user()->company_id ?? 1;
 
         return [
             'asset_item_id' => [
@@ -37,57 +37,28 @@ class UpdateAssetRequest extends FormRequest
                     ->whereNull('deleted_at'),
             ],
 
-            'asset_name_ar' => ['sometimes', 'required', 'string', 'max:255'],
-            'asset_name_en' => ['sometimes', 'required', 'string', 'max:255'],
-
             'asset_type' => [
                 'sometimes',
                 'required',
-                Rule::in([
-                    'existing_asset',
-                    'composite_asset',
-                    'composite_component',
-                ]),
+                Rule::in(['existing_asset', 'composite_asset', 'composite_component']),
             ],
 
-            'purchase_date' => ['sometimes', 'required', 'date'],
-
-            'available_for_use_date' => [
-                'sometimes',
-                'required',
-                'date',
-            ],
-
-            'net_purchase_amount' => [
-                'sometimes',
-                'required',
-                'numeric',
-                'min:0.01',
-            ],
-
-            'asset_quantity' => [
-                'sometimes',
-                'required',
-                'integer',
-                'min:1',
-            ],
-
-            'salvage_value' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-
-            'purchase_receipt_id' => [
+            'purchase_invoice_id' => [
                 'nullable',
                 'integer',
-                'exists:purchase_receipts,id',
+                Rule::exists('purchase_invoices', 'id')
+                    ->where('company_id', $companyId),
             ],
 
-            'status' => [
-                'nullable',
-                Rule::in(['active', 'disposed', 'inactive']),
-            ],
+            'purchase_date' => ['sometimes', 'nullable', 'date'],
+            'available_for_use_date' => ['sometimes', 'required', 'date'],
+
+            'net_purchase_amount' => ['sometimes', 'nullable', 'numeric', 'min:0.01'],
+            'asset_quantity' => ['sometimes', 'required', 'integer', 'min:1'],
+            'salvage_value' => ['nullable', 'numeric', 'min:0'],
+
+            'opening_accumulated_depreciation' => ['nullable', 'numeric', 'min:0'],
+            'opening_number_of_booked_depreciations' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

@@ -30,7 +30,14 @@ class WarehouseController extends Controller
 
     public function show(Warehouse $warehouse)
     {
-        return new WarehouseResource($warehouse);
+        return new WarehouseResource(
+            $warehouse->load([
+                'company',
+                'creator',
+                'parent',
+                'salesPerson',
+            ])
+        );
     }
 
     public function update(UpdateWarehouseRequest $request, Warehouse $warehouse)
@@ -45,7 +52,7 @@ class WarehouseController extends Controller
         $this->service->delete($warehouse);
 
         return response()->json([
-            'message' => 'Deleted successfully'
+            'message' => 'Deleted successfully',
         ]);
     }
 }

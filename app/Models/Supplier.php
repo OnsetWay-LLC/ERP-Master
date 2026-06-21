@@ -14,8 +14,6 @@ class Supplier extends Model
         'supplier_type',
         'supplier_name_ar',
         'supplier_name_en',
-        'first_name',
-        'last_name',
         'email',
         'mobile_number',
         'address_line_1',
@@ -24,6 +22,8 @@ class Supplier extends Model
         'city',
         'state_province',
         'country',
+        'opening_balance',
+        'opening_balance_journal_entry_id',
         'created_by',
     ];
 
@@ -36,4 +36,12 @@ class Supplier extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+    public function paymentEntries()
+{
+    return $this->hasMany(PaymentEntry::class);
+}
+public function purchaseReturns()
+{
+    return $this->hasMany(PurchaseReturn::class);
+}
 }

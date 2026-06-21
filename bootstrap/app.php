@@ -6,6 +6,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Spatie\Permission\Middleware\PermissionMiddleware;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+use Illuminate\Console\Scheduling\Schedule;
 use App\Http\Middleware\SetLocale;
 
 
@@ -24,7 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'locale' => SetLocale::class,
         ]);
     })
-   
+   ->withSchedule(function (Schedule $schedule) {
+    $schedule->command('soft-deletes:purge-old')->daily();
+})
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();

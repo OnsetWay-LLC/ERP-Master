@@ -5,8 +5,8 @@ namespace App\Services\SalesOrder;
 use App\Models\Company;
 use App\Models\FeesTemplate;
 use App\Models\Item;
+use App\Models\PickList;
 use App\Models\SalesOrder;
-use App\Models\StockEntry;
 use App\Models\TaxTemplate;
 use App\Models\WarehouseStock;
 use Illuminate\Support\Facades\DB;
@@ -19,7 +19,14 @@ class SalesOrderService
         $companyId = Company::query()->firstOrFail()->id;
 
         return SalesOrder::query()
-            ->with(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees'])
+            ->with([
+                'customer',
+                'items.item',
+                'items.warehouse',
+                'taxes',
+                'fees',
+                'pickList',
+            ])
             ->where('company_id', $companyId)
             ->latest()
             ->get();
@@ -34,6 +41,7 @@ class SalesOrderService
             'taxes.account',
             'fees.account',
             'creator',
+            'pickList.items.warehouse',
         ]);
     }
 
@@ -64,7 +72,14 @@ class SalesOrderService
             $this->saveTaxes($salesOrder, $company->id, $data['tax_template_ids'] ?? [], $totals['net_total']);
             $this->saveFees($salesOrder, $company->id, $data['fees_template_ids'] ?? [], $totals['net_total']);
 
-            return $salesOrder->load(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees']);
+            return $salesOrder->fresh()->load([
+                'customer',
+                'items.item',
+                'items.warehouse',
+                'taxes',
+                'fees',
+                'pickList',
+            ]);
         });
     }
 
@@ -99,19 +114,25 @@ class SalesOrderService
             $this->saveTaxes($salesOrder, $companyId, $data['tax_template_ids'] ?? [], $totals['net_total']);
             $this->saveFees($salesOrder, $companyId, $data['fees_template_ids'] ?? [], $totals['net_total']);
 
-            return $salesOrder->load(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees']);
+            return $salesOrder->fresh()->load([
+                'customer',
+                'items.item',
+                'items.warehouse',
+                'taxes',
+                'fees',
+                'pickList',
+            ]);
         });
     }
 
-    // Draft -> Confirmed
     public function submit(SalesOrder $salesOrder): SalesOrder
     {
         if ($salesOrder->status !== 'draft') {
-            throw new RuntimeException('Only draft sales orders can be confirmed.');
+            throw new RuntimeException('Only draft sales orders can be submitted.');
         }
 
         return DB::transaction(function () use ($salesOrder) {
-            $salesOrder->load('items');
+            $salesOrder->load(['items', 'customer']);
 
             foreach ($salesOrder->items as $item) {
                 $stock = $this->getStockForUpdate(
@@ -123,103 +144,40 @@ class SalesOrderService
                 $available = $stock->quantity - $stock->reserved_quantity;
 
                 if ($available < $item->quantity) {
-                    throw new RuntimeException('Requested quantity is greater than available stock for item: ' . $item->item_name_en);
+                    throw new RuntimeException(
+                        'Requested quantity is greater than available stock for item: ' . $item->item_name_en
+                    );
                 }
 
-                // حجز المخزون عند التأكيد
                 $stock->increment('reserved_quantity', $item->quantity);
             }
 
             $salesOrder->update([
-                'status' => 'confirmed',
+                'status' => 'delivery_and_to_bill',
             ]);
 
-            return $salesOrder->load(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees']);
-        });
-    }
+            $this->createPickListAutomatically($salesOrder);
 
-    // Confirmed -> In Process
-    public function process(SalesOrder $salesOrder): SalesOrder
-    {
-        if ($salesOrder->status !== 'confirmed') {
-            throw new RuntimeException('Only confirmed sales orders can be moved to processing.');
-        }
-
-        $salesOrder->update([
-            'status' => 'in_process',
-        ]);
-
-        return $salesOrder->load(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees']);
-    }
-
-    // In Process -> In Transit
-    public function transit(SalesOrder $salesOrder): SalesOrder
-    {
-        if ($salesOrder->status !== 'in_process') {
-            throw new RuntimeException('Only in-process sales orders can be moved to transit.');
-        }
-
-        $salesOrder->update([
-            'status' => 'in_transit',
-        ]);
-
-        return $salesOrder->load(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees']);
-    }
-
-    // In Transit -> Delivered
-    public function deliver(SalesOrder $salesOrder): SalesOrder
-    {
-        // تم التعديل ليستقبل من حالة in_transit حسب المتطلبات
-        if ($salesOrder->status !== 'in_transit') {
-            throw new RuntimeException('Only in-transit sales orders can be delivered.');
-        }
-
-        return DB::transaction(function () use ($salesOrder) {
-            $salesOrder->load('items');
-
-            foreach ($salesOrder->items as $item) {
-                $stock = $this->getStockForUpdate(
-                    $salesOrder->company_id,
-                    $item->item_id,
-                    $item->warehouse_id
-                );
-
-                if ($stock->reserved_quantity < $item->quantity) {
-                    throw new RuntimeException('Reserved quantity is not enough for item: ' . $item->item_name_en);
-                }
-
-                if ($stock->quantity < $item->quantity) {
-                    throw new RuntimeException('Stock quantity is not enough for item: ' . $item->item_name_en);
-                }
-
-                // خصم المخزون الفعلي وإزالة الحجز
-                $stock->decrement('quantity', $item->quantity);
-                $stock->decrement('reserved_quantity', $item->quantity);
-
-                $stock->update([
-                    'stock_value' => $stock->fresh()->quantity * $stock->average_rate,
-                ]);
-            }
-
-            $this->createMaterialIssue($salesOrder);
-
-            $salesOrder->update([
-                'status' => 'delivered',
+            return $salesOrder->fresh()->load([
+                'customer',
+                'items.item',
+                'items.warehouse',
+                'taxes',
+                'fees',
+                'creator',
+                'pickList.items.warehouse',
             ]);
-
-            return $salesOrder->load(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees']);
         });
     }
 
     public function cancel(SalesOrder $salesOrder): SalesOrder
     {
-        if ($salesOrder->status === 'delivered') {
-            throw new RuntimeException('Delivered sales orders cannot be cancelled.');
+        if (in_array($salesOrder->status, ['to_bill', 'completed'])) {
+            throw new RuntimeException('This sales order cannot be cancelled.');
         }
 
         return DB::transaction(function () use ($salesOrder) {
-            // فك حجز المخزون إذا كان الطلب في إحدى الحالات التي تم حجز المخزون فيها
-            if (in_array($salesOrder->status, ['confirmed', 'in_process', 'in_transit'])) {
+            if ($salesOrder->status === 'delivery_and_to_bill') {
                 $salesOrder->load('items');
 
                 foreach ($salesOrder->items as $item) {
@@ -229,16 +187,84 @@ class SalesOrderService
                         $item->warehouse_id
                     );
 
+                    if ($stock->reserved_quantity < $item->quantity) {
+                        throw new RuntimeException(
+                            'Reserved quantity is not enough for item: ' . $item->item_name_en
+                        );
+                    }
+
                     $stock->decrement('reserved_quantity', $item->quantity);
                 }
+
+                PickList::query()
+                    ->where('sales_order_id', $salesOrder->id)
+                    ->where('status', 'open')
+                    ->update(['status' => 'cancelled']);
             }
 
             $salesOrder->update([
                 'status' => 'cancelled',
             ]);
 
-            return $salesOrder->load(['customer', 'items.item', 'items.warehouse', 'taxes', 'fees']);
+            return $salesOrder->fresh()->load([
+                'customer',
+                'items.item',
+                'items.warehouse',
+                'taxes',
+                'fees',
+                'pickList',
+            ]);
         });
+    }
+
+    public function delete(SalesOrder $salesOrder): void
+    {
+        if ($salesOrder->status !== 'draft') {
+            throw new RuntimeException('Only draft sales orders can be deleted.');
+        }
+
+        DB::transaction(function () use ($salesOrder) {
+            $salesOrder->items()->delete();
+            $salesOrder->taxes()->delete();
+            $salesOrder->fees()->delete();
+            $salesOrder->delete();
+        });
+    }
+
+    private function createPickListAutomatically(SalesOrder $salesOrder): void
+    {
+        $salesOrder->loadMissing('items');
+
+        $exists = PickList::query()
+            ->where('sales_order_id', $salesOrder->id)
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        $pickList = PickList::query()->create([
+            'company_id' => $salesOrder->company_id,
+            'sales_order_id' => $salesOrder->id,
+            'customer_id' => $salesOrder->customer_id,
+            'pick_list_number' => $this->generatePickListNumber($salesOrder->company_id),
+            'posting_date' => now()->toDateString(),
+            'status' => 'open',
+            'created_by' => auth('api')->id(),
+        ]);
+
+        foreach ($salesOrder->items as $item) {
+            $pickList->items()->create([
+                'sales_order_item_id' => $item->id,
+                'item_id' => $item->item_id,
+                'warehouse_id' => $item->warehouse_id,
+                'item_code' => $item->item_code,
+                'item_name_ar' => $item->item_name_ar,
+                'item_name_en' => $item->item_name_en,
+                'required_quantity' => $item->quantity,
+                'picked_quantity' => $item->quantity,
+            ]);
+        }
     }
 
     private function saveItems(SalesOrder $salesOrder, int $companyId, array $items): void
@@ -438,81 +464,22 @@ class SalesOrderService
         return $stock;
     }
 
-    private function createMaterialIssue(SalesOrder $salesOrder): void
-    {
-        $stockEntry = StockEntry::query()->create([
-            'company_id' => $salesOrder->company_id,
-            'series' => $this->generateStockEntrySeries($salesOrder->company_id),
-            'entry_type' => 'material_issue',
-            'posting_date' => now()->toDateString(),
-            'posting_time' => now()->format('H:i'),
-            'total_incoming_value' => 0,
-            'total_outgoing_value' => $salesOrder->items->sum(function ($item) {
-                return $item->quantity * ($item->item?->purchase_price ?? 0);
-            }),
-            'value_difference' => 0 - $salesOrder->items->sum(function ($item) {
-                return $item->quantity * ($item->item?->purchase_price ?? 0);
-            }),
-            'status' => 'submitted',
-            'created_by' => auth('api')->id(),
-        ]);
-
-        foreach ($salesOrder->items as $item) {
-            $stock = WarehouseStock::query()
-                ->where('company_id', $salesOrder->company_id)
-                ->where('item_id', $item->item_id)
-                ->where('warehouse_id', $item->warehouse_id)
-                ->first();
-
-            $basicRate = $stock?->average_rate ?? 0;
-            $outgoingValue = $item->quantity * $basicRate;
-
-            $stockEntry->items()->create([
-                'item_id' => $item->item_id,
-                'barcode' => $item->item?->barcode ?? null,
-                'source_warehouse_id' => $item->warehouse_id,
-                'target_warehouse_id' => null,
-                'quantity' => $item->quantity,
-                'basic_rate' => $basicRate,
-                'incoming_value' => 0,
-                'outgoing_value' => $outgoingValue,
-                'value_difference' => 0 - $outgoingValue,
-            ]);
-        }
-    }
-
     private function generateOrderNumber(int $companyId): string
     {
         $count = SalesOrder::query()
             ->where('company_id', $companyId)
+            ->withTrashed()
             ->count() + 1;
 
         return 'SO-' . now()->format('Y') . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
     }
 
-    private function generateStockEntrySeries(int $companyId): string
+    private function generatePickListNumber(int $companyId): string
     {
-        $count = StockEntry::query()
+        $count = PickList::query()
             ->where('company_id', $companyId)
             ->count() + 1;
 
-        return 'STE-' . now()->format('Y') . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
-    }
-    public function delete(SalesOrder $salesOrder): void
-    {
-        // التحقق من أن حالة الطلب Draft فقط
-        if ($salesOrder->status !== 'draft') {
-            throw new \RuntimeException('Only draft sales orders can be deleted.');
-        }
-
-        DB::transaction(function () use ($salesOrder) {
-            // حذف التفاصيل المرتبطة بالطلب (اختياري إذا كنت تعتمد على SoftDeletes فقط للأب)
-            $salesOrder->items()->delete();
-            $salesOrder->taxes()->delete();
-            $salesOrder->fees()->delete();
-
-            // حذف أمر البيع
-            $salesOrder->delete();
-        });
+        return 'PL-' . now()->format('Y') . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
     }
 }

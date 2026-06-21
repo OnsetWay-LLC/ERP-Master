@@ -8,26 +8,31 @@ class UpdatePurchaseOrderRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth('api')->user()?->can('screen.purchase_orders');
+        return auth('api')->user()?->can('screen.purchase_orders') === true;
     }
 
     public function rules(): array
     {
         return [
-            'supplier_id' => ['sometimes', 'required', 'exists:suppliers,id'],
-            'tax_template_id' => ['nullable', 'exists:tax_templates,id'],
+            'supplier_id' => ['nullable', 'exists:suppliers,id'],
+            'posting_date' => ['nullable', 'date'],
+            'required_by_date' => ['nullable', 'date'],
 
-            'order_date' => ['sometimes', 'required', 'date'],
-            'required_by' => ['nullable', 'date'],
+            'discount_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
 
-            'additional_discount_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items' => ['nullable', 'array', 'min:1'],
+            'items.*.material_request_id' => ['nullable', 'exists:material_requests,id'],
+            'items.*.item_id' => ['nullable', 'exists:items,id'],
+            'items.*.target_warehouse_id' => ['nullable', 'exists:warehouses,id'],
+            'items.*.required_by_date' => ['nullable', 'date'],
+            'items.*.quantity' => ['nullable', 'numeric', 'min:0.01'],
+            'items.*.rate' => ['nullable', 'numeric', 'min:0'],
 
-            'items' => ['sometimes', 'required', 'array', 'min:1'],
-            'items.*.item_id' => ['required_with:items', 'exists:items,id'],
-            'items.*.target_warehouse_id' => ['required_with:items', 'exists:warehouses,id'],
-            'items.*.required_by' => ['nullable', 'date'],
-            'items.*.quantity' => ['required_with:items', 'numeric', 'min:0.01'],
-            'items.*.rate' => ['required_with:items', 'numeric', 'min:0'],
+            'tax_template_ids' => ['nullable', 'array'],
+            'tax_template_ids.*' => ['exists:tax_templates,id'],
+
+            'fees_template_ids' => ['nullable', 'array'],
+            'fees_template_ids.*' => ['exists:fees_templates,id'],
         ];
     }
 }

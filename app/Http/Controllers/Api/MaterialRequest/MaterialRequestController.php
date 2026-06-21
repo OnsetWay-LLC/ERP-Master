@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Api\MaterialRequest;
 
 use App\Http\Controllers\Controller;
@@ -18,7 +19,8 @@ class MaterialRequestController extends Controller
 
         return response()->json([
             'status' => true,
-            'data' => $data
+            'message' => 'Material Request created and sent to Purchase Order successfully.',
+            'data' => $data,
         ], 201);
     }
 
@@ -30,31 +32,33 @@ class MaterialRequestController extends Controller
 
         return response()->json([
             'status' => true,
-            'message' => 'Submitted successfully',
-            'data' => $data
+            'message' => 'Material Request sent to Purchase Order successfully.',
+            'data' => $data,
         ]);
     }
+
     public function destroy($id)
-{
-    $request = MaterialRequest::findOrFail($id);
+    {
+        $request = MaterialRequest::findOrFail($id);
 
-    $this->service->delete($request);
+        $this->service->delete($request);
 
-    return response()->json([
-        'status' => true,
-        'message' => 'Deleted successfully'
-    ]);
-}
-public function cancel($id)
-{
-    $request = MaterialRequest::findOrFail($id);
+        return response()->json([
+            'status' => true,
+            'message' => 'Deleted successfully',
+        ]);
+    }
 
-    $data = $this->service->cancel($request);
+    public function cancel($id)
+    {
+        $request = MaterialRequest::findOrFail($id);
 
-    return response()->json([
-        'status' => true,
-        'message' => 'Cancelled successfully',
-        'data' => $data,
-    ]);
-}
+        $data = $this->service->cancel($request);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Cancelled successfully',
+            'data' => $data,
+        ]);
+    }
 }

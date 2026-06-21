@@ -12,6 +12,7 @@ class SalesOrder extends Model
     protected $fillable = [
         'company_id',
         'customer_id',
+        'sales_person_id',
         'order_number',
         'order_date',
         'delivery_date',
@@ -54,4 +55,16 @@ class SalesOrder extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+    public function pickList()
+{
+    return $this->hasOne(PickList::class);
+}
+public function deliveryNotes()
+{
+    return $this->hasMany(DeliveryNote::class);
+}
+public function salesPerson()
+{
+    return $this->belongsTo(SalesPerson::class);
+}
 }

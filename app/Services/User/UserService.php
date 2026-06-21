@@ -21,7 +21,8 @@ class UserService
                   ->orWhere('email', 'like', "%{$search}%")
                   ->orWhere('name', 'like', "%{$search}%")
                   ->orWhereHas('employee', function ($employeeQuery) use ($search) {
-                      $employeeQuery->where('full_name', 'like', "%{$search}%")
+                      $employeeQuery->where('full_name_ar', 'like', "%{$search}%")
+                      ->orWhere('full_name_en', 'like', "%{$search}%")
                                     ->orWhere('national_id', 'like', "%{$search}%");
                   });
             });
@@ -49,7 +50,7 @@ class UserService
 
             $user = User::create([
                 'employee_id' => $employee->id,
-                'name' => $employee->full_name,
+                'name' => $employee->full_name_en ?? $employee->full_name_ar,
                 'username' => $data['username'],
                 'email' => $employee->company_email,
                 'password' => $data['password'],
@@ -80,5 +81,45 @@ class UserService
         return Employee::with('department')
             ->where('national_id', $nationalId)
             ->firstOrFail();
+    }
+    public function update(User $user, array $data): User
+    {
+        return DB::transaction(function () use ($user, $data) {
+            if (isset($data['national_id'])) {
+                $employee = Employee::with('department')
+                    ->where('national_id', $data['national_id'])
+                    ->firstOrFail();
+
+                if ($employee->user()->exists() && $employee->user->id !== $user->id) {
+                    throw ValidationException::withMessages([
+                        'national_id' => ['This employee already has a user account.'],
+                    ]);
+                }
+
+                $user->employee_id = $employee->id;
+               
+                $user->email = $employee->company_email;
+            }
+
+            if (isset($data['username'])) {
+                $user->username = $data['username'];
+            }
+
+            if (isset($data['password'])) {
+                $user->password = $data['password'];
+            }
+
+            if (isset($data['is_active'])) {
+                $user->is_active = $data['is_active'];
+            }
+
+            if (isset($data['role'])) {
+                $user->syncRoles($data['role']);
+            }
+
+            $user->save();
+
+            return $user->load(['employee.department', 'roles']);
+        });
     }
 }

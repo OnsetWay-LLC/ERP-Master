@@ -32,7 +32,9 @@ class AssetResource extends JsonResource
             'available_for_use_date' => $this->available_for_use_date?->format('Y-m-d'),
             'asset_quantity' => $this->asset_quantity,
             'salvage_value' => $this->salvage_value,
-
+            'purchase_invoice_id' => $this->purchase_invoice_id,
+            'opening_accumulated_depreciation' => $this->opening_accumulated_depreciation,
+            'opening_number_of_booked_depreciations' => $this->opening_number_of_booked_depreciations,
             'purchase_receipt_id' => $this->purchase_receipt_id,
             'status' => $this->status,
             'created_by' => $this->created_by,

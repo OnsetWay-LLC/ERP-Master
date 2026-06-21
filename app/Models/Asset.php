@@ -10,23 +10,28 @@ class Asset extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'company_id',
-        'series',
-        'asset_item_id',
-        'asset_category_id',
-        'location_id',
-        'asset_name_ar',
-        'asset_name_en',
-        'asset_type',
-        'purchase_date',
-        'net_purchase_amount',
-        'available_for_use_date',
-        'asset_quantity',
-        'salvage_value',
-        'purchase_receipt_id',
-        'status',
-        'created_by',
-    ];
+    'company_id',
+    'series',
+    'asset_item_id',
+    'asset_category_id',
+    'location_id',
+    'asset_name_ar',
+    'asset_name_en',
+    'asset_type',
+    'purchase_date',
+    'net_purchase_amount',
+    'available_for_use_date',
+    'asset_quantity',
+    'salvage_value',
+    'purchase_receipt_id',
+    'purchase_invoice_id',
+    'opening_accumulated_depreciation',
+    'opening_number_of_booked_depreciations',
+    'capitalized_to_asset_id',
+'capitalized_at',
+    'status',
+    'created_by',
+];
 
     protected $casts = [
         'purchase_date' => 'date',
@@ -60,4 +65,13 @@ class Asset extends Model
     {
         return $this->belongsTo(User::class, 'created_by');
     }
+    public function capitalizedToAsset()
+{
+    return $this->belongsTo(Asset::class, 'capitalized_to_asset_id');
+}
+
+public function consumedAssets()
+{
+    return $this->hasMany(Asset::class, 'capitalized_to_asset_id');
+}
 }

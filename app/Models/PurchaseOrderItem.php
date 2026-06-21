@@ -8,17 +8,18 @@ class PurchaseOrderItem extends Model
 {
     protected $fillable = [
         'purchase_order_id',
+        'material_request_id',
         'item_id',
-        'material_request_item_id',
         'target_warehouse_id',
         'item_code',
-        'barcode',
-        'required_by',
+        'item_name_ar',
+        'item_name_en',
+        'required_by_date',
         'quantity',
         'rate',
         'amount',
-        'received_qty',
     ];
+
 
     public function purchaseOrder()
     {

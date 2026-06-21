@@ -12,7 +12,7 @@ class UserResource extends JsonResource
         return [
             'id' => $this->id,
             'employee_id' => $this->employee_id,
-            'name' => $this->name,
+            
             'username' => $this->username,
             'email' => $this->email,
             'is_active' => $this->is_active,
@@ -20,7 +20,8 @@ class UserResource extends JsonResource
             'employee' => [
                 'id' => $this->employee?->id,
                 'national_id' => $this->employee?->national_id,
-                'full_name' => $this->employee?->full_name,
+                'full_name_ar' => $this->employee?->full_name_ar,
+                'full_name_en' => $this->employee?->full_name_en,
                 'department' => [
                     'id' => $this->employee?->department?->id,
                     'name_ar' => $this->employee?->department?->name_ar,

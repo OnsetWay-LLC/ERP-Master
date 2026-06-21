@@ -37,14 +37,7 @@ class StoreChartOfAccountRequest extends FormRequest
                     ->whereNull('deleted_at'),
             ],
 
-            'account_number' => [
-                'required',
-                'string',
-                'max:50',
-                Rule::unique('chart_of_accounts', 'account_number')
-                    ->where('company_id', $companyId)
-                    ->whereNull('deleted_at'),
-            ],
+           
 
             'account_type' => [
                 'required',

@@ -42,17 +42,7 @@ class UpdateChartOfAccountRequest extends FormRequest
                     ->ignore($accountId),
             ],
 
-            'account_number' => [
-                'sometimes',
-                'required',
-                'string',
-                'max:50',
-                Rule::unique('chart_of_accounts', 'account_number')
-                    ->where('company_id', $companyId)
-                    ->whereNull('deleted_at')
-                    ->ignore($accountId),
-            ],
-
+           
             'account_type' => [
                 'sometimes',
                 'required',

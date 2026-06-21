@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Accounting;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreJournalEntryRequest extends FormRequest
 {
@@ -37,6 +38,8 @@ class StoreJournalEntryRequest extends FormRequest
             'lines.*.debit' => ['nullable', 'numeric', 'min:0'],
             'lines.*.credit' => ['nullable', 'numeric', 'min:0'],
             'lines.*.note' => ['nullable', 'string'],
+            'asset_id' => ['nullable', 'integer', 'exists:assets,id'],
+'source_type' => ['nullable', Rule::in(['manual', 'asset_depreciation'])],
         ];
     }
 }

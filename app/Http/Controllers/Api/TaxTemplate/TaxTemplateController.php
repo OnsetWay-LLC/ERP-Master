@@ -64,4 +64,15 @@ class TaxTemplateController extends Controller
             'message' => 'Deleted successfully'
         ]);
     }
+    public function restore($id)
+    {
+        $template = TaxTemplate::withTrashed()->findOrFail($id);
+
+        $this->service->restore($template);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Restored successfully'
+        ]);
+    }
 }

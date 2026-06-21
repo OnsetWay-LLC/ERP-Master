@@ -18,14 +18,25 @@ return new class extends Migration
         ->constrained('purchase_orders')
         ->cascadeOnDelete();
 
-    $table->string('type'); // actual, on_net_total
+    $table->foreignId('tax_template_id')
+        ->nullable()
+        ->constrained('tax_templates')
+        ->noActionOnDelete();
+
+    $table->foreignId('tax_template_line_id')
+        ->nullable()
+        ->constrained('tax_template_lines')
+        ->noActionOnDelete();
+
+    $table->string('title');
+    $table->string('type');
 
     $table->foreignId('account_id')
         ->constrained('chart_of_accounts')
         ->noActionOnDelete();
 
-    $table->decimal('tax_rate', 8, 2)->nullable();
-    $table->decimal('amount', 18, 2)->default(0);
+    $table->decimal('tax_rate', 15, 2)->nullable();
+    $table->decimal('amount', 15, 2);
 
     $table->timestamps();
 });

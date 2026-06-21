@@ -62,4 +62,9 @@ class TaxTemplateService
     {
         $template->delete();
     }
+    public function restore($template)
+    {
+        $template->restore();
+        
+    }
 }

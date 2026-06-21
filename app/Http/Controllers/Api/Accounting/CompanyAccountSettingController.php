@@ -3,6 +3,7 @@ namespace App\Http\Controllers\Api\Accounting;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Accounting\StoreCompanyAccountSettingRequest;
+use App\Http\Requests\Accounting\UpdateCompanyAccountSettingRequest;
 use App\Http\Resources\Accounting\CompanyAccountSettingResource;
 use App\Services\Accounting\CompanyAccountSettingService;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +32,19 @@ class CompanyAccountSettingController extends Controller
             'data' => new CompanyAccountSettingResource($data),
         ]);
     }
+    public function update(UpdateCompanyAccountSettingRequest $request): JsonResponse
+{
+    $data = $this->service->update(
+        $request->validated(),
+        $this->companyId()
+    );
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Default accounts updated successfully',
+        'data' => new CompanyAccountSettingResource($data),
+    ]);
+}
 
     public function show(): JsonResponse
     {

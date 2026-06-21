@@ -19,8 +19,6 @@ class UpdateSupplierRequest extends FormRequest
             'supplier_name_ar' => ['sometimes', 'required'],
             'supplier_name_en' => ['sometimes', 'required'],
 
-            'first_name' => ['nullable'],
-            'last_name' => ['nullable'],
 
             'email' => ['nullable', 'email'],
             'mobile_number' => ['nullable'],
@@ -36,6 +34,7 @@ class UpdateSupplierRequest extends FormRequest
                 'string',
                 'in:' . implode(',', array_keys(config('company.countries')))
             ],
+            'opening_balance' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

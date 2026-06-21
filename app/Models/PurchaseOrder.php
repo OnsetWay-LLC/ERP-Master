@@ -10,21 +10,10 @@ class PurchaseOrder extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'company_id',
-        'supplier_id',
-        'material_request_id',
-        'tax_template_id',
-        'order_number',
-        'order_date',
-        'required_by',
-        'net_total',
-        'tax_total',
-        'additional_discount_percentage',
-        'additional_discount_amount',
-        'grand_total',
-        'total_amount',
-        'status',
-        'created_by',
+        'company_id', 'supplier_id', 'series', 'posting_date', 'required_by_date',
+        'total_quantity', 'net_total', 'tax_total', 'fees_total',
+        'discount_percentage', 'discount_amount', 'grand_total','material_request',
+        'status', 'created_by',
     ];
 
     public function company()
@@ -51,7 +40,7 @@ class PurchaseOrder extends Model
     {
         return $this->hasMany(PurchaseOrderTax::class);
     }
-
+   public function fees() { return $this->hasMany(PurchaseOrderFee::class); }
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');

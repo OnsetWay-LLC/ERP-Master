@@ -17,6 +17,7 @@ class IndexSupplierRequest extends FormRequest
             'search' => ['nullable', 'string'],
             'supplier_type' => ['nullable', 'in:company,individual'],
             'country' => ['nullable'],
+            'opening_balance' => ['nullable', 'numeric', 'min:0'],
             'city' => ['nullable'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'trashed' => ['nullable', 'in:with,only'],

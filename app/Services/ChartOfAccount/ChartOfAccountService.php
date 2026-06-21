@@ -33,53 +33,54 @@ class ChartOfAccountService
             ->get();
     }
 
-    public function create(array $data, int $companyId, ?int $createdBy = null): ChartOfAccount
-    {
-        $accountType = $data['account_type'];
-        $accountLevel = $data['account_level'];
-        $subCategory = $data['sub_category'];
+   public function create(array $data, int $companyId, ?int $createdBy = null): ChartOfAccount
+{
+    $accountType = $data['account_type'];
+    $accountLevel = $data['account_level'];
+    $subCategory = $data['sub_category'];
 
-        ChartOfAccountCategories::validateTypeWithSubCategory($accountType, $subCategory);
+    ChartOfAccountCategories::validateTypeWithSubCategory($accountType, $subCategory);
 
-        $rootCategory = $accountType === AccountTypes::OTHER
-            ? $data['root_category']
-            : ChartOfAccountCategories::rootBySubCategory($subCategory);
+    $rootCategory = $accountType === AccountTypes::OTHER
+        ? $data['root_category']
+        : ChartOfAccountCategories::rootBySubCategory($subCategory);
 
-        if ($accountLevel === 'child') {
-            $parent = $this->findSelectedParent(
-                $companyId,
-                (int) $data['parent_account_id'],
-                $accountType,
-                $rootCategory,
-                $subCategory
-            );
-        } else {
-            $parent = $this->findCategoryParent(
-                $companyId,
-                $rootCategory,
-                $subCategory
-            );
-        }
-
-        return ChartOfAccount::create([
-            'company_id' => $companyId,
-            'parent_id' => $parent->id,
-
-            'name_ar' => $data['name_ar'],
-            'name_en' => $data['name_en'],
-            'account_number' => $data['account_number'],
-
-            'root_category' => $rootCategory,
-            'sub_category' => $subCategory,
-            'account_type' => $accountType,
-            'account_level' => $accountLevel,
-
-            'is_active' => $data['is_active'] ?? true,
-            'is_system' => false,
-            'created_by' => $createdBy,
-        ]);
+    if ($accountLevel === 'child') {
+        $parent = $this->findSelectedParent(
+            $companyId,
+            (int) $data['parent_account_id'],
+            $accountType,
+            $rootCategory,
+            $subCategory
+        );
+    } else {
+        $parent = $this->findCategoryParent(
+            $companyId,
+            $rootCategory,
+            $subCategory
+        );
     }
 
+    $accountNumber = $this->generateAccountNumber($companyId, $parent->id, $parent->account_number);
+
+    return ChartOfAccount::create([
+        'company_id' => $companyId,
+        'parent_id' => $parent->id,
+
+        'name_ar' => $data['name_ar'],
+        'name_en' => $data['name_en'],
+        'account_number' => $accountNumber,
+
+        'root_category' => $rootCategory,
+        'sub_category' => $subCategory,
+        'account_type' => $accountType,
+        'account_level' => $accountLevel,
+
+        'is_active' => $data['is_active'] ?? true,
+        'is_system' => false,
+        'created_by' => $createdBy,
+    ]);
+}
     public function update(ChartOfAccount $account, array $data): ChartOfAccount
     {
         if ($account->is_system) {
@@ -189,4 +190,33 @@ class ChartOfAccountService
 
         return $parent;
     }
+   private function generateAccountNumber(int $companyId, int $parentId, string $parentAccountNumber): string
+{
+    $prefix = substr($parentAccountNumber, 0, 3);
+
+    $lastNumber = ChartOfAccount::query()
+        ->where('company_id', $companyId)
+        ->whereNull('deleted_at')
+        ->where('account_number', 'like', $prefix . '%')
+        ->orderByRaw('CAST(account_number AS INT) DESC')
+        ->value('account_number');
+
+    if (! $lastNumber) {
+        return (string) ((int) $parentAccountNumber + 1);
+    }
+
+    $nextNumber = (int) $lastNumber + 1;
+
+    while (
+        ChartOfAccount::query()
+            ->where('company_id', $companyId)
+            ->whereNull('deleted_at')
+            ->where('account_number', (string) $nextNumber)
+            ->exists()
+    ) {
+        $nextNumber++;
+    }
+
+    return (string) $nextNumber;
+}
 }
