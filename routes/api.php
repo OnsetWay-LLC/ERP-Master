@@ -68,6 +68,9 @@ use App\Http\Controllers\Api\Reports\FixedAssetRegisterReportController;
 use App\Http\Controllers\Api\Reports\AssetDepreciationLedgerReportController;
 use App\Http\Controllers\Api\Reports\AssetDepreciationBalanceReportController;
 use App\Http\Controllers\Api\FinancialYear\FinancialYearController;
+use App\Http\Controllers\Api\TaxDeclarationSetting\TaxDeclarationSettingController;
+use App\Http\Controllers\Api\Reports\TaxDeclarationReportController;
+
 use Illuminate\Support\Facades\Route;
 
 
@@ -652,3 +655,12 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::post('/{financialYear}/reopen', [FinancialYearController::class, 'reopen']);
         Route::delete('/{financialYear}', [FinancialYearController::class, 'destroy']);
     });
+    Route::middleware(['auth:api','permission:screen.tax_declaration_settings'])->group(function () {
+    Route::get('/tax-declaration-setting', [TaxDeclarationSettingController::class, 'show']);
+    Route::post('/tax-declaration-setting', [TaxDeclarationSettingController::class, 'store']);
+    Route::put('/tax-declaration-setting', [TaxDeclarationSettingController::class, 'update']);
+});
+
+Route::middleware(['auth:api','permission:screen.tax_declaration_reports'])->group(function () {
+    Route::get('/tax-declaration-report/pdf', [TaxDeclarationReportController::class, 'pdf']);
+});

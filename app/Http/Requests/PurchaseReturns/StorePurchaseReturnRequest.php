@@ -15,16 +15,14 @@ class StorePurchaseReturnRequest extends FormRequest
     {
         return [
             'purchase_invoice_id' => ['required', 'integer', 'exists:purchase_invoices,id'],
-            'posting_date' => ['required', 'date'],
+           
             'posting_time' => ['nullable', 'date_format:H:i'],
             'payment_due_date' => ['nullable', 'date'],
 
             'rejected_warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
             'target_warehouse_id' => ['nullable', 'integer', 'exists:warehouses,id'],
 
-            'use_default_account' => ['required', 'boolean'],
-            'purchase_account_id' => ['nullable', 'integer', 'exists:chart_of_accounts,id'],
-            'supplier_account_id' => ['nullable', 'integer', 'exists:chart_of_accounts,id'],
+            
 
             'tax_template_id' => ['nullable', 'integer', 'exists:tax_templates,id'],
             'fees_template_id' => ['nullable', 'integer', 'exists:fees_templates,id'],

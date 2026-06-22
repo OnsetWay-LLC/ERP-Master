@@ -448,17 +448,48 @@ $credit += $invoice->grand_total;
         return $entry;
     }
 
-    private function generateInvoiceNumber(int $companyId): string
-    {
-        $count = PurchaseInvoice::withTrashed()->where('company_id', $companyId)->count() + 1;
-        return 'PINV-' . now()->format('Y') . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
+  private function generateInvoiceNumber(int $companyId): string
+{
+    $year = now()->format('Y');
+    $prefix = 'PINV-' . $year . '-';
+
+    $last = PurchaseInvoice::withTrashed()
+        ->where('company_id', $companyId)
+        ->where('invoice_number', 'like', $prefix . '%')
+        ->orderByDesc('id')
+        ->lockForUpdate()
+        ->first();
+
+    $next = 1;
+
+    if ($last && $last->invoice_number) {
+        $lastNumber = (int) substr($last->invoice_number, -5);
+        $next = $lastNumber + 1;
     }
 
-    private function generateJournalEntryNumber(int $companyId): string
-    {
-        $count = JournalEntry::where('company_id', $companyId)->count() + 1;
-        return 'JV-' . now()->format('Y') . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
+    return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+}
+
+   private function generateJournalEntryNumber(int $companyId): string
+{
+    $year = now()->format('Y');
+    $prefix = 'JV-' . $year . '-';
+
+    $last = JournalEntry::where('company_id', $companyId)
+        ->where('entry_number', 'like', $prefix . '%')
+        ->orderByDesc('id')
+        ->lockForUpdate()
+        ->first();
+
+    $next = 1;
+
+    if ($last && $last->entry_number) {
+        $lastNumber = (int) substr($last->entry_number, -5);
+        $next = $lastNumber + 1;
     }
+
+    return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
+}
     public function purchaseInvoiceAccounts()
 {
     $companyId = 1;

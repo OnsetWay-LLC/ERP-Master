@@ -80,7 +80,10 @@ class PermissionSeeder extends Seeder
             'screen.asset_depreciation_entries',
             'permission:screen.assets.scrappings',
             'permission:screen.fixed.asset.register.report',
-            'screen.account_closing'
+            'screen.account_closing',
+            'screen.tax_declaration_settings',
+           'screen.tax_declaration_reports',
+           'screen.gross_profit_report'
 
         ];
 
