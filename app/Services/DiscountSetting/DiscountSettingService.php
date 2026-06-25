@@ -26,21 +26,15 @@ class DiscountSettingService
         ]
     );
 }
-    public function show(): DiscountSetting
-    {
-        $company = Company::query()->firstOrFail();
+   public function show(): ?DiscountSetting
+{
+    $company = Company::query()->firstOrFail();
 
-        return DiscountSetting::query()
-            ->with(['company', 'creator'])
-            ->firstOrCreate(
-                ['company_id' => $company->id],
-                [
-                    'sub_accountant_max_discount' => 0,
-                    'department_manager_max_discount' => 0,
-                    'created_by' => auth('api')->id(),
-                ]
-            );
-    }
+    return DiscountSetting::query()
+        ->with(['company', 'creator'])
+        ->where('company_id', $company->id)
+        ->first();
+}
 
     public function update(array $data): DiscountSetting
     {

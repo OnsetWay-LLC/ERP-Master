@@ -47,8 +47,8 @@ class StoreSalesInvoiceRequest extends FormRequest
             'cogs_account_id' => ['required_if:posting_method,manual', 'nullable', 'exists:chart_of_accounts,id'],
             'stock_account_id' => ['required_if:posting_method,manual', 'nullable', 'exists:chart_of_accounts,id'],
 
-            'payment_mode' => ['required', 'in:cash,bank,credit'],
-            'payment_account_id' => ['required_unless:payment_mode,credit', 'nullable', 'exists:chart_of_accounts,id'],
+         'payment_mode' => ['nullable', 'in:credit'],
+'payment_account_id' => ['nullable', 'prohibited'],
 
             'discount_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
 
@@ -91,12 +91,7 @@ class StoreSalesInvoiceRequest extends FormRequest
                 }
             }
 
-            if ($this->input('payment_mode') === 'credit' && $this->input('payment_account_id')) {
-                $validator->errors()->add(
-                    'payment_account_id',
-                    'Payment account is not allowed when payment mode is credit.'
-                );
-            }
+           
         });
     }
 }

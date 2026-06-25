@@ -37,7 +37,7 @@ class FeesTemplateService
             $data['company_id'] = $companyId;
             $data['created_by'] = $createdBy;
             $data['is_active'] = $data['is_active'] ?? true;
-
+            $data['is_refundable'] = $data['is_refundable'] ?? false;
             if ($data['type'] === 'percentage') {
                 $data['amount'] = null;
             }
@@ -67,7 +67,9 @@ class FeesTemplateService
             if (($data['type'] ?? $feesTemplate->type) === 'fixed_amount') {
                 $data['fees_rate'] = null;
             }
-
+           if (array_key_exists('is_refundable', $data)) {
+    $data['is_refundable'] = (bool) $data['is_refundable'];
+}
             $feesTemplate->update($data);
 
             return $feesTemplate->fresh('account');

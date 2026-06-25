@@ -11,6 +11,7 @@ use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Models\TaxTemplate;
 use App\Models\WarehouseStock;
+use App\Models\StockLedger;
 use Illuminate\Support\Facades\DB;
 
 class PurchaseReturnService
@@ -377,31 +378,37 @@ class PurchaseReturnService
         );
 
         // Fees: actual = fixed amount | percentage = rate × item_total
-        $feesTotal = $this->syncFees(
-            $purchaseReturn,
-            $data['fees_template_id'] ?? null,
-            $totalAmount
-        );
+       $feesTotal = $this->syncFees(
+    $purchaseReturn,
+    $invoice,
+    $totalAmount
+);
 
-        // net_total = item_total − fees
-        $netTotal = round($totalAmount - $feesTotal, 2);
+       $applyOn    = $data['apply_additional_discount_on'] ?? 'grand_total';
+$percentage = (float) ($data['additional_discount_percentage'] ?? 0);
 
-        // Discount base:
-        //   Grand Total → item_total
-        //   Net Total   → item_total − fees  (= net_total)
-        $applyOn    = $data['apply_additional_discount_on'] ?? 'grand_total';
-        $percentage = (float) ($data['additional_discount_percentage'] ?? 0);
+// إذا كان الخصم على Grand Total فقاعدته هي Total Amount
+$discountBase = abs($totalAmount);
 
-        $discountBase = $applyOn === 'net_total'
-            ? abs($netTotal)      // item_total − fees
-            : abs($totalAmount);  // item_total only
+// إذا كان الخصم على Net Total فسنحسبه بعد تحديد الـ Net Total
+if ($applyOn === 'net_total') {
+    $discountBase = abs($totalAmount);
+}
 
-        $discountAmount = $percentage > 0
-            ? -round($discountBase * ($percentage / 100), 2)
-            : 0.0;
+$discountAmount = $percentage > 0
+    ? -round($discountBase * ($percentage / 100), 2)
+    : 0;
 
-        // grand_total = item_total + tax + fees − discount
-        $grandTotal = round($totalAmount + $taxTotal + $feesTotal - $discountAmount, 2);
+// Net Total
+$netTotal = $discountAmount == 0
+    ? round($totalAmount, 2)
+    : round($totalAmount - $discountAmount, 2);
+
+// Grand Total
+$grandTotal = round(
+    $totalAmount + $taxTotal + $feesTotal - $discountAmount,
+    2
+);
 
         $purchaseReturn->update([
             'total_quantity'             => round($totalQty, 2),
@@ -458,34 +465,45 @@ class PurchaseReturnService
     // Fees
     // -------------------------------------------------------------------------
 
-    private function syncFees(PurchaseReturn $purchaseReturn, ?int $feesTemplateId, float $baseAmount): float
-    {
-        if (! $feesTemplateId) {
-            return 0;
+   private function syncFees(
+    PurchaseReturn $purchaseReturn,
+    PurchaseInvoice $invoice,
+    float $baseAmount
+): float
+{
+    $invoice->loadMissing(['fees.template', 'items']);
+
+    $invoiceItemsTotal = abs((float) $invoice->items->sum('amount'));
+
+    if ($invoiceItemsTotal <= 0) {
+        return 0;
+    }
+
+    $returnRatio = abs($baseAmount) / $invoiceItemsTotal;
+
+    $totalFees = 0;
+
+    foreach ($invoice->fees as $fee) {
+        if (! ($fee->template?->is_refundable ?? false)) {
+            continue;
         }
 
-        $template = FeesTemplate::findOrFail($feesTemplateId);
-
-        if ($template->type === 'actual') {
-            // Fixed amount — added directly
-            $amount = -abs((float) $template->amount);
-        } else {
-            // Percentage — always calculated from item_total
-            $amount = -round(abs($baseAmount) * ((float) $template->fees_rate / 100), 2);
-        }
+        $amount = -round(abs((float) $fee->amount) * $returnRatio, 2);
 
         $purchaseReturn->fees()->create([
-            'fees_template_id' => $template->id,
-            'type'             => $template->type,
-            'account_head_id'  => $template->account_id,
-            'fees_rate'        => $template->fees_rate ?? 0,
+            'fees_template_id' => $fee->fees_template_id,
+            'type'             => $fee->type,
+            'account_head_id'  => $fee->account_id,
+            'fees_rate'        => $fee->fees_rate ?? 0,
             'amount'           => $amount,
             'total'            => round($baseAmount + $amount, 2),
         ]);
 
-        return round($amount, 2);
+        $totalFees += $amount;
     }
 
+    return round($totalFees, 2);
+}
     // -------------------------------------------------------------------------
     // Already returned qty
     // -------------------------------------------------------------------------
@@ -509,309 +527,319 @@ class PurchaseReturnService
     // Stock movement
     // -------------------------------------------------------------------------
 
-    private function applyStockMovement(PurchaseReturn $purchaseReturn): void
-    {
-        if (! $purchaseReturn->target_warehouse_id || ! $purchaseReturn->rejected_warehouse_id) {
-            abort(422, 'Target warehouse and rejected warehouse are required.');
-        }
-
-        foreach ($purchaseReturn->items as $item) {
-            $qty = abs((float) $item->quantity);
-
-            $sourceStock = WarehouseStock::where('warehouse_id', $purchaseReturn->target_warehouse_id)
-                ->where('item_id', $item->item_id)
-                ->lockForUpdate()
-                ->first();
-
-            if (! $sourceStock || (float) $sourceStock->quantity < $qty) {
-                abort(422, 'Not enough stock in target warehouse for returned item.');
-            }
-
-            $rate         = (float) $sourceStock->average_rate;
-            $sourceNewQty = round((float) $sourceStock->quantity - $qty, 2);
-
-            $sourceStock->update([
-                'quantity'    => $sourceNewQty,
-                'stock_value' => round($sourceNewQty * $rate, 2),
-            ]);
-
-            $rejectedStock = WarehouseStock::where('warehouse_id', $purchaseReturn->rejected_warehouse_id)
-                ->where('item_id', $item->item_id)
-                ->lockForUpdate()
-                ->first();
-
-            if ($rejectedStock) {
-                $newQty = round((float) $rejectedStock->quantity + $qty, 2);
-
-                $rejectedStock->update([
-                    'quantity'     => $newQty,
-                    'average_rate' => $rate,
-                    'stock_value'  => round($newQty * $rate, 2),
-                ]);
-            } else {
-                $payload = [
-                    'warehouse_id' => $purchaseReturn->rejected_warehouse_id,
-                    'item_id'      => $item->item_id,
-                    'quantity'     => $qty,
-                    'average_rate' => $rate,
-                    'stock_value'  => round($qty * $rate, 2),
-                ];
-
-                if (isset($sourceStock->company_id)) {
-                    $payload['company_id'] = $sourceStock->company_id;
-                }
-
-                WarehouseStock::create($payload);
-            }
-        }
+   private function applyStockMovement(PurchaseReturn $purchaseReturn): void
+{
+    if (! $purchaseReturn->target_warehouse_id || ! $purchaseReturn->rejected_warehouse_id) {
+        abort(422, 'Target warehouse and rejected warehouse are required.');
     }
 
-    private function reverseStockMovement(PurchaseReturn $purchaseReturn): void
-    {
-        if (! $purchaseReturn->target_warehouse_id || ! $purchaseReturn->rejected_warehouse_id) {
-            abort(422, 'Target warehouse and rejected warehouse are required.');
+    foreach ($purchaseReturn->items as $item) {
+        $qty = abs((float) $item->quantity);
+
+        $sourceStock = WarehouseStock::where('warehouse_id', $purchaseReturn->target_warehouse_id)
+            ->where('item_id', $item->item_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $sourceStock || (float) $sourceStock->quantity < $qty) {
+            abort(422, 'Not enough stock in target warehouse for returned item.');
         }
 
-        foreach ($purchaseReturn->items as $item) {
-            $qty = abs((float) $item->quantity);
+        $rate = (float) $sourceStock->average_rate;
+        $sourceNewQty = round((float) $sourceStock->quantity - $qty, 2);
 
-            $rejectedStock = WarehouseStock::where('warehouse_id', $purchaseReturn->rejected_warehouse_id)
-                ->where('item_id', $item->item_id)
-                ->lockForUpdate()
-                ->first();
+        $sourceStock->update([
+            'quantity'    => $sourceNewQty,
+            'stock_value' => round($sourceNewQty * $rate, 2),
+        ]);
 
-            if (! $rejectedStock || (float) $rejectedStock->quantity < $qty) {
-                abort(422, 'Not enough stock in rejected warehouse to cancel this return.');
-            }
+        StockLedger::create([
+            'company_id'     => $sourceStock->company_id,
+            'item_id'        => $item->item_id,
+            'warehouse_id'   => $purchaseReturn->target_warehouse_id,
+            'entry_date'     => $purchaseReturn->posting_date,
+            'reference_type' => 'purchase_return',
+            'reference_id'   => $purchaseReturn->id,
+            'quantity_in'    => 0,
+            'quantity_out'   => $qty,
+            'balance_qty'    => $sourceNewQty,
+            'basic_rate'     => $rate,
+            'stock_value'    => -round($qty * $rate, 2),
+            'balance_value'  => round($sourceNewQty * $rate, 2),
+        ]);
 
-            $rate           = (float) $rejectedStock->average_rate;
-            $rejectedNewQty = round((float) $rejectedStock->quantity - $qty, 2);
+        $rejectedStock = WarehouseStock::where('warehouse_id', $purchaseReturn->rejected_warehouse_id)
+            ->where('item_id', $item->item_id)
+            ->lockForUpdate()
+            ->first();
+
+        if ($rejectedStock) {
+            $newQty = round((float) $rejectedStock->quantity + $qty, 2);
 
             $rejectedStock->update([
-                'quantity'    => $rejectedNewQty,
-                'stock_value' => round($rejectedNewQty * $rate, 2),
+                'quantity'     => $newQty,
+                'average_rate' => $rate,
+                'stock_value'  => round($newQty * $rate, 2),
             ]);
 
-            $targetStock = WarehouseStock::where('warehouse_id', $purchaseReturn->target_warehouse_id)
-                ->where('item_id', $item->item_id)
-                ->lockForUpdate()
-                ->first();
+            StockLedger::create([
+                'company_id'     => $sourceStock->company_id,
+                'item_id'        => $item->item_id,
+                'warehouse_id'   => $purchaseReturn->rejected_warehouse_id,
+                'entry_date'     => $purchaseReturn->posting_date,
+                'reference_type' => 'purchase_return',
+                'reference_id'   => $purchaseReturn->id,
+                'quantity_in'    => $qty,
+                'quantity_out'   => 0,
+                'balance_qty'    => $newQty,
+                'basic_rate'     => $rate,
+                'stock_value'    => round($qty * $rate, 2),
+                'balance_value'  => round($newQty * $rate, 2),
+            ]);
+        } else {
+            $payload = [
+                'warehouse_id' => $purchaseReturn->rejected_warehouse_id,
+                'item_id'      => $item->item_id,
+                'quantity'     => $qty,
+                'average_rate' => $rate,
+                'stock_value'  => round($qty * $rate, 2),
+            ];
 
-            if ($targetStock) {
-                $newQty = round((float) $targetStock->quantity + $qty, 2);
-
-                $targetStock->update([
-                    'quantity'     => $newQty,
-                    'average_rate' => $rate,
-                    'stock_value'  => round($newQty * $rate, 2),
-                ]);
-            } else {
-                $payload = [
-                    'warehouse_id' => $purchaseReturn->target_warehouse_id,
-                    'item_id'      => $item->item_id,
-                    'quantity'     => $qty,
-                    'average_rate' => $rate,
-                    'stock_value'  => round($qty * $rate, 2),
-                ];
-
-                if (isset($rejectedStock->company_id)) {
-                    $payload['company_id'] = $rejectedStock->company_id;
-                }
-
-                WarehouseStock::create($payload);
+            if (isset($sourceStock->company_id)) {
+                $payload['company_id'] = $sourceStock->company_id;
             }
+
+            $createdRejectedStock = WarehouseStock::create($payload);
+
+            StockLedger::create([
+                'company_id'     => $sourceStock->company_id,
+                'item_id'        => $item->item_id,
+                'warehouse_id'   => $purchaseReturn->rejected_warehouse_id,
+                'entry_date'     => $purchaseReturn->posting_date,
+                'reference_type' => 'purchase_return',
+                'reference_id'   => $purchaseReturn->id,
+                'quantity_in'    => $qty,
+                'quantity_out'   => 0,
+                'balance_qty'    => $createdRejectedStock->quantity,
+                'basic_rate'     => $rate,
+                'stock_value'    => round($qty * $rate, 2),
+                'balance_value'  => $createdRejectedStock->stock_value,
+            ]);
         }
     }
+}
 
+ private function reverseStockMovement(PurchaseReturn $purchaseReturn): void
+{
+    if (! $purchaseReturn->target_warehouse_id || ! $purchaseReturn->rejected_warehouse_id) {
+        abort(422, 'Target warehouse and rejected warehouse are required.');
+    }
+
+    foreach ($purchaseReturn->items as $item) {
+        $qty = abs((float) $item->quantity);
+
+        $rejectedStock = WarehouseStock::where('warehouse_id', $purchaseReturn->rejected_warehouse_id)
+            ->where('item_id', $item->item_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $rejectedStock || (float) $rejectedStock->quantity < $qty) {
+            abort(422, 'Not enough stock in rejected warehouse to cancel this return.');
+        }
+
+        $rate = (float) $rejectedStock->average_rate;
+        $rejectedNewQty = round((float) $rejectedStock->quantity - $qty, 2);
+
+        $rejectedStock->update([
+            'quantity'    => $rejectedNewQty,
+            'stock_value' => round($rejectedNewQty * $rate, 2),
+        ]);
+
+        StockLedger::create([
+            'company_id'     => $rejectedStock->company_id,
+            'item_id'        => $item->item_id,
+            'warehouse_id'   => $purchaseReturn->rejected_warehouse_id,
+            'entry_date'     => now()->toDateString(),
+            'reference_type' => 'cancel_purchase_return',
+            'reference_id'   => $purchaseReturn->id,
+            'quantity_in'    => 0,
+            'quantity_out'   => $qty,
+            'balance_qty'    => $rejectedNewQty,
+            'basic_rate'     => $rate,
+            'stock_value'    => -round($qty * $rate, 2),
+            'balance_value'  => round($rejectedNewQty * $rate, 2),
+        ]);
+
+        $targetStock = WarehouseStock::where('warehouse_id', $purchaseReturn->target_warehouse_id)
+            ->where('item_id', $item->item_id)
+            ->lockForUpdate()
+            ->first();
+
+        if ($targetStock) {
+            $newQty = round((float) $targetStock->quantity + $qty, 2);
+
+            $targetStock->update([
+                'quantity'     => $newQty,
+                'average_rate' => $rate,
+                'stock_value'  => round($newQty * $rate, 2),
+            ]);
+
+            StockLedger::create([
+                'company_id'     => $rejectedStock->company_id,
+                'item_id'        => $item->item_id,
+                'warehouse_id'   => $purchaseReturn->target_warehouse_id,
+                'entry_date'     => now()->toDateString(),
+                'reference_type' => 'cancel_purchase_return',
+                'reference_id'   => $purchaseReturn->id,
+                'quantity_in'    => $qty,
+                'quantity_out'   => 0,
+                'balance_qty'    => $newQty,
+                'basic_rate'     => $rate,
+                'stock_value'    => round($qty * $rate, 2),
+                'balance_value'  => round($newQty * $rate, 2),
+            ]);
+        } else {
+            $payload = [
+                'warehouse_id' => $purchaseReturn->target_warehouse_id,
+                'item_id'      => $item->item_id,
+                'quantity'     => $qty,
+                'average_rate' => $rate,
+                'stock_value'  => round($qty * $rate, 2),
+            ];
+
+            if (isset($rejectedStock->company_id)) {
+                $payload['company_id'] = $rejectedStock->company_id;
+            }
+
+            $createdTargetStock = WarehouseStock::create($payload);
+
+            StockLedger::create([
+                'company_id'     => $rejectedStock->company_id,
+                'item_id'        => $item->item_id,
+                'warehouse_id'   => $purchaseReturn->target_warehouse_id,
+                'entry_date'     => now()->toDateString(),
+                'reference_type' => 'cancel_purchase_return',
+                'reference_id'   => $purchaseReturn->id,
+                'quantity_in'    => $qty,
+                'quantity_out'   => 0,
+                'balance_qty'    => $createdTargetStock->quantity,
+                'basic_rate'     => $rate,
+                'stock_value'    => round($qty * $rate, 2),
+                'balance_value'  => $createdTargetStock->stock_value,
+            ]);
+        }
+    }
+}
     // -------------------------------------------------------------------------
     // Journal entries
     // -------------------------------------------------------------------------
 
     private function createJournalEntry(PurchaseReturn $purchaseReturn): JournalEntry
-    {
-        $purchaseReturn->loadMissing(['taxes', 'fees', 'purchaseInvoice']);
+{
+    $purchaseReturn->loadMissing([
+        'purchaseInvoice.journalEntry.lines',
+    ]);
 
-        $supplierAmount = abs((float) $purchaseReturn->grand_total);
-        $itemsAmount    = abs((float) $purchaseReturn->total_amount);
-        $taxAmount      = abs((float) $purchaseReturn->tax_total);
-        $feesAmount     = abs((float) $purchaseReturn->fees_total);
-        $discountAmount = abs((float) $purchaseReturn->additional_discount_amount);
+    $invoice = $purchaseReturn->purchaseInvoice;
+    $originalEntry = $invoice->journalEntry;
 
-        // Debit:  supplier (grand_total) + discount  =  items + tax + fees
-        // Credit: items + tax + fees
-        $totalDebit  = round($supplierAmount + $discountAmount, 2);
-        $totalCredit = round($itemsAmount + $taxAmount + $feesAmount, 2);
-
-       $journalEntry = JournalEntry::create([
-    'company_id'    => (int) $purchaseReturn->purchaseInvoice->company_id,
-    'entry_number' => $this->generateJournalEntryNumber(
-    (int) $purchaseReturn->purchaseInvoice->company_id
-),
-    'entry_date'    => $purchaseReturn->posting_date,
-    'total_debit'   => $totalDebit,
-    'total_credit'  => $totalCredit,
-    'status'        => 'posted',
-    'created_by'    => auth('api')->id(),
-    'posted_at'     => now(),
-]);
-
-        $lines = [];
-
-        $lines[] = [
-            'account_id' => $purchaseReturn->supplier_account_id,
-            'debit'      => $supplierAmount,
-            'credit'     => 0,
-            'note'       => 'Purchase Return Supplier Payable: ' . $purchaseReturn->series,
-        ];
-
-        if ($discountAmount > 0) {
-            $discountAccountId = CompanyAccountSetting::where('company_id', $purchaseReturn->purchaseInvoice->company_id)
-                ->value('default_payment_discount_account_id');
-
-            if (! $discountAccountId) {
-                abort(422, 'Default payment discount account is not configured.');
-            }
-
-            $lines[] = [
-                'account_id' => $discountAccountId,
-                'debit'      => $discountAmount,
-                'credit'     => 0,
-                'note'       => 'Purchase Return Discount: ' . $purchaseReturn->series,
-            ];
-        }
-
-        $lines[] = [
-            'account_id' => $purchaseReturn->purchase_account_id,
-            'debit'      => 0,
-            'credit'     => $itemsAmount,
-            'note'       => 'Purchase Return Inventory/Purchase Account: ' . $purchaseReturn->series,
-        ];
-
-        foreach ($purchaseReturn->taxes as $tax) {
-            $lines[] = [
-                'account_id' => $tax->account_head_id,
-                'debit'      => 0,
-                'credit'     => abs((float) $tax->amount),
-                'note'       => 'Purchase Return Tax: ' . $purchaseReturn->series,
-            ];
-        }
-
-        foreach ($purchaseReturn->fees as $fee) {
-            $lines[] = [
-                'account_id' => $fee->account_head_id,
-                'debit'      => 0,
-                'credit'     => abs((float) $fee->amount),
-                'note'       => 'Purchase Return Fees: ' . $purchaseReturn->series,
-            ];
-        }
-
-        if (round($totalDebit, 2) !== round($totalCredit, 2)) {
-            abort(422, 'Purchase Return journal entry is not balanced.');
-        }
-
-       $companyId = (int) $purchaseReturn->purchaseInvoice->company_id;
-
-foreach ($lines as &$line) {
-    $line['company_id'] = $companyId;
-}
-unset($line);
-
-$journalEntry->lines()->createMany($lines);
-
-        return $journalEntry;
+    if (! $originalEntry) {
+        abort(422, 'Original purchase invoice journal entry not found.');
     }
 
-    private function createCancelJournalEntry(PurchaseReturn $purchaseReturn): JournalEntry
-    {
-        $purchaseReturn->loadMissing(['taxes', 'fees', 'purchaseInvoice']);
+  $invoice->loadMissing('items');
 
-        $supplierAmount = abs((float) $purchaseReturn->grand_total);
-        $itemsAmount    = abs((float) $purchaseReturn->total_amount);
-        $taxAmount      = abs((float) $purchaseReturn->tax_total);
-        $feesAmount     = abs((float) $purchaseReturn->fees_total);
-        $discountAmount = abs((float) $purchaseReturn->additional_discount_amount);
+$ratio = abs($purchaseReturn->total_amount)
+        / max($invoice->items->sum('amount'), 0.01);
 
-        $totalDebit  = round($itemsAmount + $taxAmount + $feesAmount, 2);
-        $totalCredit = round($supplierAmount + $discountAmount, 2);
+    $companyId = (int) $invoice->company_id;
 
-       $journalEntry = JournalEntry::create([
-    'company_id'    => (int) $purchaseReturn->purchaseInvoice->company_id,
-    'entry_number' => $this->generateJournalEntryNumber(
-    (int) $purchaseReturn->purchaseInvoice->company_id
-),
-    'entry_date'    => now()->toDateString(),
-    'total_debit'   => $totalDebit,
-    'total_credit'  => $totalCredit,
-    'status'        => 'posted',
-    'created_by'    => auth('api')->id(),
-    'posted_at'     => now(),
-]);
+    $entry = JournalEntry::create([
+        'company_id'    => $companyId,
+        'entry_number'  => $this->generateJournalEntryNumber($companyId),
+        'entry_date'    => $purchaseReturn->posting_date,
+        'total_debit'   => 0,
+        'total_credit'  => 0,
+        'description'   => 'Purchase Return - ' . $purchaseReturn->series,
+        'status'        => 'posted',
+        'created_by'    => auth('api')->id(),
+        'posted_at'     => now(),
+    ]);
 
-        $lines = [];
+    $totalDebit = 0;
+    $totalCredit = 0;
 
-        $lines[] = [
-            'account_id' => $purchaseReturn->purchase_account_id,
-            'debit'      => $itemsAmount,
-            'credit'     => 0,
-            'note'       => 'Cancel Purchase Return Inventory/Purchase Account: ' . $purchaseReturn->series,
-        ];
+    foreach ($originalEntry->lines as $line) {
+        $debit = round(abs((float) $line->credit) * $ratio, 2);
+        $credit = round(abs((float) $line->debit) * $ratio, 2);
 
-        foreach ($purchaseReturn->taxes as $tax) {
-            $lines[] = [
-                'account_id' => $tax->account_head_id,
-                'debit'      => abs((float) $tax->amount),
-                'credit'     => 0,
-                'note'       => 'Cancel Purchase Return Tax: ' . $purchaseReturn->series,
-            ];
+        if ($debit <= 0 && $credit <= 0) {
+            continue;
         }
 
-        foreach ($purchaseReturn->fees as $fee) {
-            $lines[] = [
-                'account_id' => $fee->account_head_id,
-                'debit'      => abs((float) $fee->amount),
-                'credit'     => 0,
-                'note'       => 'Cancel Purchase Return Fees: ' . $purchaseReturn->series,
-            ];
-        }
+        $entry->lines()->create([
+            'company_id' => $companyId,
+            'account_id' => $line->account_id,
+            'debit'      => $debit,
+            'credit'     => $credit,
+            'note'       => 'Purchase Return Reverse: ' . $line->note,
+        ]);
 
-        $lines[] = [
-            'account_id' => $purchaseReturn->supplier_account_id,
-            'debit'      => 0,
-            'credit'     => $supplierAmount,
-            'note'       => 'Cancel Purchase Return Supplier Payable: ' . $purchaseReturn->series,
-        ];
-
-        if ($discountAmount > 0) {
-            $discountAccountId = CompanyAccountSetting::where('company_id', $purchaseReturn->purchaseInvoice->company_id)
-                ->value('default_payment_discount_account_id');
-
-            if (! $discountAccountId) {
-                abort(422, 'Default payment discount account is not configured.');
-            }
-
-            $lines[] = [
-                'account_id' => $discountAccountId,
-                'debit'      => 0,
-                'credit'     => $discountAmount,
-                'note'       => 'Cancel Purchase Return Discount: ' . $purchaseReturn->series,
-            ];
-        }
-
-        if (round($totalDebit, 2) !== round($totalCredit, 2)) {
-            abort(422, 'Cancel Purchase Return journal entry is not balanced.');
-        }
-
-        $companyId = (int) $purchaseReturn->purchaseInvoice->company_id;
-
-foreach ($lines as &$line) {
-    $line['company_id'] = $companyId;
-}
-unset($line);
-
-$journalEntry->lines()->createMany($lines);
-
-        return $journalEntry;
+        $totalDebit += $debit;
+        $totalCredit += $credit;
     }
+
+    if (round($totalDebit, 2) !== round($totalCredit, 2)) {
+        abort(422, 'Purchase Return journal entry is not balanced.');
+    }
+
+    $entry->update([
+        'total_debit' => round($totalDebit, 2),
+        'total_credit' => round($totalCredit, 2),
+    ]);
+
+    return $entry;
+}
+
+   private function createCancelJournalEntry(PurchaseReturn $purchaseReturn): JournalEntry
+{
+    $purchaseReturn->loadMissing([
+        'journalEntry.lines',
+        'purchaseInvoice',
+    ]);
+
+    $originalReturnEntry = $purchaseReturn->journalEntry;
+
+    if (! $originalReturnEntry) {
+        abort(422, 'Original purchase return journal entry not found.');
+    }
+
+    $companyId = (int) $purchaseReturn->purchaseInvoice->company_id;
+
+    $entry = JournalEntry::create([
+        'company_id'    => $companyId,
+        'entry_number'  => $this->generateJournalEntryNumber($companyId),
+        'entry_date'    => now()->toDateString(),
+        'total_debit'   => (float) $originalReturnEntry->total_credit,
+        'total_credit'  => (float) $originalReturnEntry->total_debit,
+        'description'   => 'Cancel Purchase Return - ' . $purchaseReturn->series,
+        'status'        => 'posted',
+        'created_by'    => auth('api')->id(),
+        'posted_at'     => now(),
+    ]);
+
+    foreach ($originalReturnEntry->lines as $line) {
+        $entry->lines()->create([
+            'company_id' => $companyId,
+            'account_id' => $line->account_id,
+            'debit'      => $line->credit,
+            'credit'     => $line->debit,
+            'note'       => 'Cancel Purchase Return Reverse: ' . $line->note,
+        ]);
+    }
+
+    return $entry;
+}
 
     // -------------------------------------------------------------------------
     // Helpers

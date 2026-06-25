@@ -68,8 +68,7 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
                 throw new RuntimeException('Paid amount cannot exceed outstanding amount.');
             }
 
-            $accounts = $this->resolveAccounts($data, $companyId);
-
+           $accounts = $this->resolveAccounts($invoice, $data, $companyId);
             $payment = SalesPayment::create([
                 'company_id' => $companyId,
                 'sales_invoice_id' => $invoice->id,
@@ -77,7 +76,7 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
                 'payment_number' => $this->generatePaymentNumber($companyId),
                 'payment_date' => $data['payment_date'],
                 'payment_time' => $data['payment_time'],
-                'posting_method' => $data['posting_method'],
+                'posting_method' => $accounts['posting_method'],
                 'payment_mode' => $data['payment_mode'],
                 'receivable_account_id' => $accounts['receivable_account_id'],
                 'payment_account_id' => $accounts['payment_account_id'],
@@ -189,36 +188,34 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         });
     }
 
-    private function resolveAccounts(array $data, int $companyId): array
-    {
-        if ($data['posting_method'] === 'manual') {
-            return [
-                'receivable_account_id' => $data['receivable_account_id'],
-                'payment_account_id' => $data['payment_account_id'],
-            ];
-        }
+private function resolveAccounts(SalesInvoice $invoice, array $data, int $companyId): array
+{
+    $settings = CompanyAccountSetting::where('company_id', $companyId)->first();
 
-        $settings = CompanyAccountSetting::where('company_id', $companyId)->first();
-
-        if (! $settings) {
-            throw new RuntimeException('Company account settings are not configured.');
-        }
-
-        $paymentAccountId = match ($data['payment_mode']) {
-            'cash' => $settings->default_cash_account_id,
-            'bank' => $settings->default_bank_account_id,
-            default => null,
-        };
-
-        if (! $settings->default_receivable_account_id || ! $paymentAccountId) {
-            throw new RuntimeException('Default payment accounts are not configured.');
-        }
-
-        return [
-            'receivable_account_id' => $settings->default_receivable_account_id,
-            'payment_account_id' => $paymentAccountId,
-        ];
+    if (! $settings) {
+        throw new RuntimeException('Company account settings are not configured.');
     }
+
+    $paymentAccountId = match ($data['payment_mode']) {
+        'cash' => $settings->default_cash_account_id,
+        'bank' => $settings->default_bank_account_id,
+        default => null,
+    };
+
+    if (! $invoice->receivable_account_id) {
+        throw new RuntimeException('Sales invoice receivable account is not configured.');
+    }
+
+    if (! $paymentAccountId) {
+        throw new RuntimeException('Default payment account is not configured for selected payment mode.');
+    }
+
+    return [
+        'posting_method' => $invoice->posting_method,
+        'receivable_account_id' => $invoice->receivable_account_id,
+        'payment_account_id' => $paymentAccountId,
+    ];
+}
 
     private function createJournalEntry(SalesPayment $payment): JournalEntry
     {
@@ -317,17 +314,36 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         return 'partially_paid';
     }
 
-    private function generatePaymentNumber(int $companyId): string
-    {
-        $count = SalesPayment::where('company_id', $companyId)->count() + 1;
+   private function generatePaymentNumber(int $companyId): string
+{
+    $year = now()->format('Y');
+    $prefix = 'SPAY-' . $year . '-';
 
-        return 'SPAY-' . now()->format('Y') . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
-    }
+    $lastNumber = SalesPayment::where('company_id', $companyId)
+        ->where('payment_number', 'like', $prefix . '%')
+        ->selectRaw("
+            MAX(CAST(RIGHT(payment_number, 5) AS INT)) as max_number
+        ")
+        ->value('max_number');
 
-    private function generateJournalEntryNumber(int $companyId): string
-    {
-        $count = JournalEntry::where('company_id', $companyId)->count() + 1;
+    $nextNumber = ((int) $lastNumber) + 1;
 
-        return 'JV-' . now()->format('Y') . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
-    }
+    return $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+}
+   private function generateJournalEntryNumber(int $companyId): string
+{
+    $year = now()->format('Y');
+    $prefix = 'JV-' . $year . '-';
+
+    $lastNumber = JournalEntry::where('company_id', $companyId)
+        ->where('entry_number', 'like', $prefix . '%')
+        ->selectRaw("
+            MAX(CAST(RIGHT(entry_number, 5) AS INT)) as max_number
+        ")
+        ->value('max_number');
+
+    $nextNumber = ((int) $lastNumber) + 1;
+
+    return $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+}
 }

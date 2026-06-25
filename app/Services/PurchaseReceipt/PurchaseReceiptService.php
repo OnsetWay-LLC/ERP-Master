@@ -32,102 +32,106 @@ class PurchaseReceiptService
     ->latest('id')
     ->paginate(request('per_page', 10));
 }
-    public function create(array $data): PurchaseReceipt
-    {
-        return DB::transaction(function () use ($data) {
-            $companyId = Company::query()->value('id');
-app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $companyId,
-        $data['posting_date'] ?? now()->toDateString(),
-        'create'
-    );
-            $totals = $this->calculateTotals($data, $companyId);
+   public function create(array $data): PurchaseReceipt
+{
+    return DB::transaction(function () use ($data) {
+        $companyId = Company::query()->value('id');
 
-            $receipt = PurchaseReceipt::create([
-                'company_id' => $companyId,
-                'purchase_order_id' => $data['purchase_order_id'],
-                'supplier_id' => $data['supplier_id'],
-                'receipt_number' => $this->generateReceiptNumber($companyId),
-                'receipt_date' => $data['posting_date'] ?? now()->toDateString(),
-                'posting_time' => $data['posting_time'] ?? now()->format('H:i:s'),
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+            ->validateTransactionDate(
+                $companyId,
+                $data['posting_date'] ?? now()->toDateString(),
+                'create'
+            );
 
-                'total_qty' => $totals['total_qty'],
-                'total' => $totals['total'],
-                'tax_total' => $totals['tax_total'],
-                'fees_total' => $totals['fees_total'],
-                'additional_discount_percentage' => $totals['discount_percentage'],
-                'additional_discount_amount' => $totals['discount_amount'],
-                'grand_total' => $totals['grand_total'],
+        $totals = $this->calculateTotals($data, $companyId);
 
-                'status' => 'draft',
-                'created_by' => auth('api')->id(),
-            ]);
+        $receipt = PurchaseReceipt::create([
+            'company_id' => $companyId,
+            'purchase_order_id' => $data['purchase_order_id'],
+            'supplier_id' => $data['supplier_id'],
+            'receipt_number' => $this->generateReceiptNumber($companyId),
+            'receipt_date' => $data['posting_date'] ?? now()->toDateString(),
+            'posting_time' => $data['posting_time'] ?? now()->format('H:i:s'),
 
-            foreach ($totals['items'] as $item) {
-                $receipt->items()->create($item);
-            }
+            'total_qty' => $totals['total_qty'],
+            'total' => $totals['total'],
+            'tax_total' => $totals['tax_total'],
+            'fees_total' => $totals['fees_total'],
+            'additional_discount_percentage' => $totals['discount_percentage'],
+            'additional_discount_amount' => $totals['discount_amount'],
+            'grand_total' => $totals['grand_total'],
 
-            foreach ($totals['taxes'] as $tax) {
-                $receipt->taxes()->create($tax);
-            }
+            'status' => 'draft',
+            'created_by' => auth('api')->id(),
+        ]);
 
-            foreach ($totals['fees'] as $fee) {
-                $receipt->fees()->create($fee);
-            }
-
-            return $this->loadReceipt($receipt);
-        });
-    }
-
-    public function update(PurchaseReceipt $receipt, array $data): PurchaseReceipt
-    {
-        if ($receipt->status !== 'draft') {
-            throw new InvalidArgumentException('Only draft purchase receipts can be updated.');
+        foreach ($totals['items'] as $item) {
+            $receipt->items()->create($item);
         }
-app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $receipt->company_id,
-        $data['posting_date'] ?? $receipt->receipt_date,
-        'update'
-    );
-        return DB::transaction(function () use ($receipt, $data) {
-            $totals = $this->calculateTotals($data, $receipt->company_id);
 
-            $receipt->update([
-                'purchase_order_id' => $data['purchase_order_id'],
-                'supplier_id' => $data['supplier_id'],
-                'receipt_date' => $data['posting_date'] ?? $receipt->receipt_date,
-                'posting_time' => $data['posting_time'] ?? $receipt->posting_time,
+        foreach ($totals['taxes'] as $tax) {
+            $receipt->taxes()->create($tax);
+        }
 
-                'total_qty' => $totals['total_qty'],
-                'total' => $totals['total'],
-                'tax_total' => $totals['tax_total'],
-                'fees_total' => $totals['fees_total'],
-                'additional_discount_percentage' => $totals['discount_percentage'],
-                'additional_discount_amount' => $totals['discount_amount'],
-                'grand_total' => $totals['grand_total'],
-            ]);
+        foreach ($totals['fees'] as $fee) {
+            $receipt->fees()->create($fee);
+        }
 
-            $receipt->items()->delete();
-            $receipt->taxes()->delete();
-            $receipt->fees()->delete();
-
-            foreach ($totals['items'] as $item) {
-                $receipt->items()->create($item);
-            }
-
-            foreach ($totals['taxes'] as $tax) {
-                $receipt->taxes()->create($tax);
-            }
-
-            foreach ($totals['fees'] as $fee) {
-                $receipt->fees()->create($fee);
-            }
-
-            return $this->loadReceipt($receipt);
-        });
+        return $this->loadReceipt($receipt);
+    });
+}
+  public function update(PurchaseReceipt $receipt, array $data): PurchaseReceipt
+{
+    if ($receipt->status !== 'draft') {
+        throw new InvalidArgumentException('Only draft purchase receipts can be updated.');
     }
+
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $receipt->company_id,
+            $data['posting_date'] ?? $receipt->receipt_date,
+            'update'
+        );
+
+    return DB::transaction(function () use ($receipt, $data) {
+        $totals = $this->calculateTotals($data, $receipt->company_id);
+
+        $receipt->update([
+            'purchase_order_id' => $data['purchase_order_id'],
+            'supplier_id' => $data['supplier_id'],
+            'receipt_date' => $data['posting_date'] ?? $receipt->receipt_date,
+            'posting_time' => $data['posting_time'] ?? $receipt->posting_time,
+
+            'total_qty' => $totals['total_qty'],
+            'total' => $totals['total'],
+
+            'tax_total' => $totals['tax_total'],
+            'fees_total' => $totals['fees_total'],
+            'additional_discount_percentage' => $totals['discount_percentage'],
+            'additional_discount_amount' => $totals['discount_amount'],
+            'grand_total' => $totals['grand_total'],
+        ]);
+
+        $receipt->items()->delete();
+        $receipt->taxes()->delete();
+        $receipt->fees()->delete();
+
+        foreach ($totals['items'] as $item) {
+            $receipt->items()->create($item);
+        }
+
+        foreach ($totals['taxes'] as $tax) {
+            $receipt->taxes()->create($tax);
+        }
+
+        foreach ($totals['fees'] as $fee) {
+            $receipt->fees()->create($fee);
+        }
+
+        return $this->loadReceipt($receipt);
+    });
+}
 
     public function submit(PurchaseReceipt $receipt): PurchaseReceipt
     {
@@ -278,118 +282,126 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         });
     }
 
-    private function calculateTotals(array $data, int $companyId): array
-    {
-        $items = [];
-        $totalQty = 0;
-        $total = 0;
+  private function calculateTotals(array $data, int $companyId): array
+{
+    $items = [];
+    $totalQty = 0;
+    $total = 0;
 
-       foreach ($data['items'] as $row) {
-    $acceptedQty = (float) $row['accepted_qty'];
-    $rejectedQty = (float) ($row['rejected_qty'] ?? 0);
-    $totalItemQty = $acceptedQty + $rejectedQty;
+    foreach ($data['items'] as $row) {
+        $acceptedQty = (float) $row['accepted_qty'];
+        $rejectedQty = (float) ($row['rejected_qty'] ?? 0);
+        $totalItemQty = $acceptedQty + $rejectedQty;
 
-    $poItem = PurchaseOrderItem::with('item')
-        ->findOrFail($row['purchase_order_item_id']);
+        $poItem = PurchaseOrderItem::with('item')
+            ->findOrFail($row['purchase_order_item_id']);
 
-    $rate = (float) $poItem->rate;
-    $barcode = $poItem->item?->barcode;
+        $rate = (float) $poItem->rate;
+        $barcode = $poItem->item?->barcode;
 
-    $amount = $totalItemQty * $rate;
+        $amount = round($totalItemQty * $rate, 2);
 
-    $items[] = [
-        'purchase_order_item_id' => $poItem->id,
-        'item_id' => $poItem->item_id,
-        'barcode' => $barcode,
-        'accepted_warehouse_id' => $row['accepted_warehouse_id'],
-        'rejected_warehouse_id' => $row['rejected_warehouse_id'] ?? null,
-        'accepted_qty' => $acceptedQty,
-        'rejected_qty' => $rejectedQty,
-        'total_qty' => $totalItemQty,
-        'rate' => $rate,
-        'amount' => $amount,
-    ];
+        $items[] = [
+            'purchase_order_item_id' => $poItem->id,
+            'item_id' => $poItem->item_id,
+            'barcode' => $barcode,
+            'accepted_warehouse_id' => $row['accepted_warehouse_id'],
+            'rejected_warehouse_id' => $row['rejected_warehouse_id'] ?? null,
+            'accepted_qty' => $acceptedQty,
+            'rejected_qty' => $rejectedQty,
+            'total_qty' => $totalItemQty,
+            'rate' => $rate,
+            'amount' => $amount,
+        ];
 
-    $totalQty += $totalItemQty;
-    $total += $amount;
-}
+        $totalQty += $totalItemQty;
+        $total += $amount;
+    }
 
-        $taxes = [];
-        $taxTotal = 0;
+    $total = round($total, 2);
 
-        foreach (($data['tax_template_ids'] ?? []) as $taxTemplateId) {
-            $template = TaxTemplate::with('lines')
-                ->where('company_id', $companyId)
-                ->findOrFail($taxTemplateId);
+    $discountPercentage = (float) ($data['additional_discount_percentage'] ?? 0);
 
-            foreach ($template->lines as $line) {
-                $amount = $line->type === 'actual'
-                    ? (float) ($line->amount ?? 0)
-                    : $total * ((float) $line->tax_rate / 100);
+    $discountAmount = isset($data['additional_discount_amount'])
+        ? round((float) $data['additional_discount_amount'], 2)
+        : round($total * ($discountPercentage / 100), 2);
 
-                $taxes[] = [
-                    'tax_template_id' => $template->id,
-                    'tax_template_line_id' => $line->id,
-                    'title' => $template->title,
-                    'type' => $line->type,
-                    'account_id' => $line->account_id,
-                    'tax_rate' => $line->tax_rate ?? 0,
-                    'amount' => $amount,
-                ];
+    $netTotal = round($total - $discountAmount, 2);
 
-                $taxTotal += $amount;
-            }
-        }
+    $taxes = [];
+    $taxTotal = 0;
 
-        $fees = [];
-        $feesTotal = 0;
+    foreach (($data['tax_template_ids'] ?? []) as $taxTemplateId) {
+        $template = TaxTemplate::with('lines')
+            ->where('company_id', $companyId)
+            ->findOrFail($taxTemplateId);
 
-        foreach (($data['fees_template_ids'] ?? []) as $feesTemplateId) {
-            $template = FeesTemplate::query()
-                ->where('company_id', $companyId)
-                ->findOrFail($feesTemplateId);
+        foreach ($template->lines as $line) {
+            $amount = $line->type === 'actual'
+                ? (float) ($line->amount ?? 0)
+                : round($netTotal * ((float) $line->tax_rate / 100), 2);
 
-            $amount = $template->type === 'fixed_amount'
-                ? (float) ($template->amount ?? 0)
-                : $total * ((float) $template->fees_rate / 100);
-
-            $fees[] = [
-                'fees_template_id' => $template->id,
+            $taxes[] = [
+                'tax_template_id' => $template->id,
+                'tax_template_line_id' => $line->id,
                 'title' => $template->title,
-                'type' => $template->type,
-                'account_id' => $template->account_id,
-                'fees_rate' => $template->fees_rate ?? 0,
+                'type' => $line->type,
+                'account_id' => $line->account_id,
+                'tax_rate' => $line->tax_rate ?? 0,
                 'amount' => $amount,
             ];
 
-            $feesTotal += $amount;
+            $taxTotal += $amount;
         }
-
-        $discountPercentage = (float) ($data['additional_discount_percentage'] ?? 0);
-
-        $discountAmount = isset($data['additional_discount_amount'])
-            ? (float) $data['additional_discount_amount']
-            : ($total * $discountPercentage / 100);
-
-        $grandTotal = ($total + $taxTotal + $feesTotal) - $discountAmount;
-
-        if ($grandTotal < 0) {
-            throw new InvalidArgumentException('Grand total cannot be negative.');
-        }
-
-        return [
-            'items' => $items,
-            'taxes' => $taxes,
-            'fees' => $fees,
-            'total_qty' => $totalQty,
-            'total' => $total,
-            'tax_total' => $taxTotal,
-            'fees_total' => $feesTotal,
-            'discount_percentage' => $discountPercentage,
-            'discount_amount' => $discountAmount,
-            'grand_total' => $grandTotal,
-        ];
     }
+
+    $fees = [];
+    $feesTotal = 0;
+
+    foreach (($data['fees_template_ids'] ?? []) as $feesTemplateId) {
+        $template = FeesTemplate::query()
+            ->where('company_id', $companyId)
+            ->findOrFail($feesTemplateId);
+
+        $amount = $template->type === 'fixed_amount'
+            ? (float) ($template->amount ?? 0)
+            : round($netTotal * ((float) $template->fees_rate / 100), 2);
+
+        $fees[] = [
+            'fees_template_id' => $template->id,
+            'title' => $template->title,
+            'type' => $template->type,
+            'account_id' => $template->account_id,
+            'fees_rate' => $template->fees_rate ?? 0,
+            'amount' => $amount,
+        ];
+
+        $feesTotal += $amount;
+    }
+
+    $taxTotal = round($taxTotal, 2);
+    $feesTotal = round($feesTotal, 2);
+
+    $grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
+
+    if ($grandTotal < 0) {
+        throw new InvalidArgumentException('Grand total cannot be negative.');
+    }
+
+    return [
+        'items' => $items,
+        'taxes' => $taxes,
+        'fees' => $fees,
+        'total_qty' => round($totalQty, 2),
+        'total' => $total,
+        'net_total' => $netTotal,
+        'tax_total' => $taxTotal,
+        'fees_total' => $feesTotal,
+        'discount_percentage' => $discountPercentage,
+        'discount_amount' => $discountAmount,
+        'grand_total' => $grandTotal,
+    ];
+}
 
     private function increaseReceivedQty($receiptItem): void
     {

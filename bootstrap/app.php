@@ -8,6 +8,7 @@ use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
 use Illuminate\Console\Scheduling\Schedule;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\AuditLogMiddleware;
 
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => PermissionMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
             'locale' => SetLocale::class,
+            'audit.log' => AuditLogMiddleware::class
         ]);
     })
    ->withSchedule(function (Schedule $schedule) {

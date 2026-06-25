@@ -74,7 +74,7 @@ class ItemWisePurchaseRegisterReportService
                     ?? ($locale === 'ar' ? 'غير مدفوع بعد' : 'Not Paid Yet'),
 
                 'purchase_order_no' => $invoice->purchaseOrder?->series ?? '-',
-                'purchase_receipt_no' => $invoice->purchaseReceipt?->series ?? '-',
+                'purchase_receipt_no' => $invoice->purchaseReceipt?->receipt_number ?? '-',
 
                 'expenses_account' => $locale === 'ar'
     ? ($invoice->purchaseAccount?->name_ar ?? $invoice->purchaseAccount?->name_en)

@@ -24,8 +24,6 @@ class SalesInvoiceResource extends JsonResource
             'posting_time' => $this->posting_time,
             'payment_due_date' => $this->payment_due_date,
             'posting_method' => $this->posting_method,
-            'payment_mode' => $this->payment_mode,
-            'payment_account_id' => $this->payment_account_id,
             'receivable_account_id' => $this->receivable_account_id,
             'sales_account_id' => $this->sales_account_id,
             'cogs_account_id' => $this->cogs_account_id,

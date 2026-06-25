@@ -15,4 +15,8 @@ class PurchaseInvoiceFee extends Model
 {
     return $this->belongsTo(ChartOfAccount::class, 'account_id');
 }
+public function template()
+{
+    return $this->belongsTo(FeesTemplate::class, 'fees_template_id');
+}
 }

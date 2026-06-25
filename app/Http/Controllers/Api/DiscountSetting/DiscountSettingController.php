@@ -27,15 +27,22 @@ public function store(
         'data' => new DiscountSettingResource($setting),
     ]);
 }
-    public function show(): JsonResponse
-    {
-        $setting = $this->service->show();
+    public function show()
+{
+    $setting = $this->service->show();
 
+    if (! $setting) {
         return response()->json([
-            'message' => 'Discount settings retrieved successfully.',
-            'data' => new DiscountSettingResource($setting),
-        ]);
+            'status' => false,
+            'message' => 'No discount settings found.'
+        ], 404);
     }
+
+    return response()->json([
+        'status' => true,
+        'data' => $setting
+    ]);
+}
 
     public function update(UpdateDiscountSettingRequest $request): JsonResponse
     {

@@ -72,7 +72,7 @@ class PermissionSeeder extends Seeder
             'screen.purchase_payments',
             'screen.purchase_returns',
             'screen.supplier_ledger_reports',
-            'screen.ItemWisePurchaseRegisterReport',
+            'screen.item_wise_purchase_register_report',
             'screen.asset-capitalizations',
             'screen.asset_value_adjustments',
             'screen.asset_repairs',
@@ -83,7 +83,15 @@ class PermissionSeeder extends Seeder
             'screen.account_closing',
             'screen.tax_declaration_settings',
            'screen.tax_declaration_reports',
-           'screen.gross_profit_report'
+           'screen.gross_profit_report',
+           'screen.owner_equity_report',
+           'screen.stock_ledger_report',
+           'screen.supplier_ledger_reports',
+           'screen.accounts_payable_report',
+           'screen.warehouse_wise_stock_balance_report',
+           'screen.audit_report',
+           'screen.balance_sheet'
+          
 
         ];
 

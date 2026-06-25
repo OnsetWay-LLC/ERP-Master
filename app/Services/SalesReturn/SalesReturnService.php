@@ -429,61 +429,64 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
     });
 }
     private function calculateTotals(int $companyId, array $data): array
-    {
-        $netTotal = 0;
+{
+    $baseAmount = 0;
 
-        foreach ($data['items'] as $row) {
-            $invoiceItem = SalesInvoiceItem::findOrFail($row['sales_invoice_item_id']);
+    foreach ($data['items'] as $row) {
+        $invoiceItem = SalesInvoiceItem::findOrFail($row['sales_invoice_item_id']);
 
-            if ((float) $row['returned_qty'] > (float) $invoiceItem->quantity) {
-                throw new RuntimeException('Returned quantity cannot exceed original invoice quantity.');
-            }
-
-            $netTotal += (float) $row['returned_qty'] * (float) $invoiceItem->rate;
+        if ((float) $row['returned_qty'] > (float) $invoiceItem->quantity) {
+            throw new RuntimeException(
+                'Returned quantity cannot exceed original invoice quantity.'
+            );
         }
 
-        $taxTotal = 0;
-
-        foreach (($data['tax_template_ids'] ?? []) as $taxTemplateId) {
-            $template = TaxTemplate::with('lines')->findOrFail($taxTemplateId);
-
-            foreach ($template->lines as $line) {
-                $taxTotal += $line->type === 'on_net_total'
-                    ? $netTotal * ((float) $line->tax_rate / 100)
-                    : (float) ($line->amount ?? 0);
-            }
-        }
-
-        $feesTotal = 0;
-
-        foreach (($data['fees_template_ids'] ?? []) as $feesTemplateId) {
-            $template = FeesTemplate::findOrFail($feesTemplateId);
-
-            $feesTotal += $template->type === 'percentage'
-                ? $netTotal * ((float) $template->fees_rate / 100)
-                : (float) ($template->amount ?? 0);
-        }
-
-        $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
-        $discountApplyOn = $data['discount_apply_on'] ?? 'grand_total';
-
-        $base = $discountApplyOn === 'net_total'
-            ? $netTotal
-            : ($netTotal + $taxTotal + $feesTotal);
-
-        $discountAmount = $base * ($discountPercentage / 100);
-
-        $grandTotal = ($netTotal + $taxTotal + $feesTotal) - $discountAmount;
-
-        return [
-            'net_total' => $netTotal,
-            'tax_total' => $taxTotal,
-            'fees_total' => $feesTotal,
-            'discount_amount' => $discountAmount,
-            'grand_total' => $grandTotal,
-        ];
+        $baseAmount += (float) $row['returned_qty'] * (float) $invoiceItem->rate;
     }
 
+    $netTotal = $baseAmount;
+
+    $taxTotal = 0;
+
+    foreach (($data['tax_template_ids'] ?? []) as $taxTemplateId) {
+        $template = TaxTemplate::with('lines')->findOrFail($taxTemplateId);
+
+        foreach ($template->lines as $line) {
+            $taxTotal += $line->type === 'on_net_total'
+                ? $netTotal * ((float) $line->tax_rate / 100)
+                : (float) ($line->amount ?? 0);
+        }
+    }
+
+    $feesTotal = 0;
+
+    foreach (($data['fees_template_ids'] ?? []) as $feesTemplateId) {
+        $template = FeesTemplate::findOrFail($feesTemplateId);
+
+        $feesTotal += $template->type === 'percentage'
+            ? $baseAmount * ((float) $template->fees_rate / 100)
+            : (float) ($template->amount ?? 0);
+    }
+
+    $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
+    $discountApplyOn = $data['discount_apply_on'] ?? 'grand_total';
+
+    $base = $discountApplyOn === 'net_total'
+        ? $netTotal
+        : ($netTotal + $taxTotal + $feesTotal);
+
+    $discountAmount = $base * ($discountPercentage / 100);
+
+    $grandTotal = ($netTotal + $taxTotal + $feesTotal) - $discountAmount;
+
+    return [
+        'net_total' => $netTotal,
+        'tax_total' => $taxTotal,
+        'fees_total' => $feesTotal,
+        'discount_amount' => $discountAmount,
+        'grand_total' => $grandTotal,
+    ];
+}
     private function saveItems(SalesReturn $salesReturn, array $items): void
     {
         foreach ($items as $row) {
@@ -529,26 +532,33 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         }
     }
 
-    private function saveFees(SalesReturn $salesReturn, int $companyId, array $ids, float $netTotal): void
-    {
-        foreach ($ids as $id) {
-            $template = FeesTemplate::where('company_id', $companyId)->findOrFail($id);
+   private function saveFees(
+    SalesReturn $salesReturn,
+    int $companyId,
+    array $ids,
+    float $netTotal
+): void
+{
+    $baseAmount = $salesReturn->items->sum('amount');
 
-            $amount = $template->type === 'percentage'
-                ? $netTotal * ((float) $template->fees_rate / 100)
-                : (float) ($template->amount ?? 0);
+    foreach ($ids as $id) {
+        $template = FeesTemplate::where('company_id', $companyId)
+            ->findOrFail($id);
 
-            $salesReturn->fees()->create([
-                'fees_template_id' => $template->id,
-                'title' => $template->title,
-                'type' => $template->type,
-                'account_id' => $template->account_id,
-                'fees_rate' => $template->fees_rate,
-                'amount' => $amount,
-            ]);
-        }
+        $amount = $template->type === 'percentage'
+            ? $baseAmount * ((float) $template->fees_rate / 100)
+            : (float) ($template->amount ?? 0);
+
+        $salesReturn->fees()->create([
+            'fees_template_id' => $template->id,
+            'title' => $template->title,
+            'type' => $template->type,
+            'account_id' => $template->account_id,
+            'fees_rate' => $template->fees_rate,
+            'amount' => $amount,
+        ]);
     }
-
+}
     private function increaseStock(SalesReturn $salesReturn): void
     {
         foreach ($salesReturn->items as $item) {

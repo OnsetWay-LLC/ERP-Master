@@ -9,6 +9,8 @@ use App\Models\PickList;
 use App\Models\SalesOrder;
 use App\Models\TaxTemplate;
 use App\Models\WarehouseStock;
+use App\Models\Warehouse;
+use App\Models\SalesPerson;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -293,6 +295,7 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
     private function saveItems(SalesOrder $salesOrder, int $companyId, array $items): void
     {
         foreach ($items as $row) {
+            $this->validateSalesOfficerWarehouse((int) $row['warehouse_id']);
             $item = Item::query()->findOrFail($row['item_id']);
 
             $stock = WarehouseStock::query()
@@ -388,88 +391,100 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         }
     }
 
-    private function calculateTotals(int $companyId, array $data): array
-    {
-        $netTotal = 0;
+   private function calculateTotals(int $companyId, array $data): array
+{
+    $itemTotal = 0;
 
-        foreach ($data['items'] as $item) {
-            $netTotal += $item['quantity'] * $item['rate'];
-        }
-
-        $taxTotal = $this->calculateTaxTotal(
-            $companyId,
-            $data['tax_template_ids'] ?? [],
-            $netTotal
-        );
-
-        $feesTotal = $this->calculateFeesTotal(
-            $companyId,
-            $data['fees_template_ids'] ?? [],
-            $netTotal
-        );
-
-        $discountPercentage = $data['discount_percentage'] ?? 0;
-        $discountAmount = $netTotal * ($discountPercentage / 100);
-
-        $grandTotal = ($netTotal + $taxTotal + $feesTotal) - $discountAmount;
-
-        return [
-            'net_total' => $netTotal,
-            'tax_total' => $taxTotal,
-            'fees_total' => $feesTotal,
-            'discount_percentage' => $discountPercentage,
-            'discount_amount' => $discountAmount,
-            'grand_total' => $grandTotal,
-        ];
+    foreach ($data['items'] as $item) {
+        $itemTotal += (float) $item['quantity'] * (float) $item['rate'];
     }
 
-    private function calculateTaxTotal(int $companyId, array $taxTemplateIds, float $netTotal): float
-    {
-        if (empty($taxTemplateIds)) {
-            return 0;
-        }
+    $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
 
-        $total = 0;
+    $discountAmount = round(
+        $itemTotal * ($discountPercentage / 100),
+        2
+    );
 
-        $templates = TaxTemplate::query()
-            ->with('lines')
-            ->where('company_id', $companyId)
-            ->whereIn('id', $taxTemplateIds)
-            ->get();
+    $netTotal = round(
+        $itemTotal - $discountAmount,
+        2
+    );
 
-        foreach ($templates as $template) {
-            foreach ($template->lines as $line) {
-                $total += $line->type === 'on_net_total'
-                    ? $netTotal * (($line->tax_rate ?? 0) / 100)
-                    : ($line->amount ?? 0);
-            }
-        }
+    $taxTotal = $this->calculateTaxTotal(
+        $companyId,
+        $data['tax_template_ids'] ?? [],
+        $netTotal
+    );
 
-        return $total;
+    $feesTotal = $this->calculateFeesTotal(
+        $companyId,
+        $data['fees_template_ids'] ?? [],
+        $netTotal
+    );
+
+    $grandTotal = round(
+        $netTotal + $taxTotal + $feesTotal,
+        2
+    );
+
+    return [
+        'item_total' => round($itemTotal, 2),
+        'net_total' => $netTotal,
+        'tax_total' => round($taxTotal, 2),
+        'fees_total' => round($feesTotal, 2),
+        'discount_percentage' => $discountPercentage,
+        'discount_amount' => $discountAmount,
+        'grand_total' => $grandTotal,
+    ];
+}
+
+   private function calculateTaxTotal(int $companyId, array $taxTemplateIds, float $netTotal): float
+{
+    if (empty($taxTemplateIds)) {
+        return 0;
     }
 
-    private function calculateFeesTotal(int $companyId, array $feesTemplateIds, float $netTotal): float
-    {
-        if (empty($feesTemplateIds)) {
-            return 0;
+    $total = 0;
+
+    $templates = TaxTemplate::query()
+        ->with('lines')
+        ->where('company_id', $companyId)
+        ->whereIn('id', $taxTemplateIds)
+        ->get();
+
+    foreach ($templates as $template) {
+        foreach ($template->lines as $line) {
+            $total += $line->type === 'on_net_total'
+                ? $netTotal * ((float) ($line->tax_rate ?? 0) / 100)
+                : (float) ($line->amount ?? 0);
         }
-
-        $total = 0;
-
-        $templates = FeesTemplate::query()
-            ->where('company_id', $companyId)
-            ->whereIn('id', $feesTemplateIds)
-            ->where('is_active', true)
-            ->get();
-
-        foreach ($templates as $template) {
-            $total += $template->type === 'percentage'
-                ? $netTotal * (($template->fees_rate ?? 0) / 100)
-                : ($template->amount ?? 0);
-        }
-
-        return $total;
     }
+
+    return round($total, 2);
+}
+   private function calculateFeesTotal(int $companyId, array $feesTemplateIds, float $netTotal): float
+{
+    if (empty($feesTemplateIds)) {
+        return 0;
+    }
+
+    $total = 0;
+
+    $templates = FeesTemplate::query()
+        ->where('company_id', $companyId)
+        ->whereIn('id', $feesTemplateIds)
+        ->where('is_active', true)
+        ->get();
+
+    foreach ($templates as $template) {
+        $total += $template->type === 'percentage'
+            ? $netTotal * ((float) ($template->fees_rate ?? 0) / 100)
+            : (float) ($template->amount ?? 0);
+    }
+
+    return round($total, 2);
+}
 
     private function getStockForUpdate(int $companyId, int $itemId, int $warehouseId): WarehouseStock
     {
@@ -505,4 +520,35 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
 
         return 'PL-' . now()->format('Y') . '-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
     }
+    private function validateSalesOfficerWarehouse(int $warehouseId): void
+{
+    $user = auth('api')->user();
+
+    if (! $user) {
+        throw new RuntimeException('Unauthenticated user.');
+    }
+
+    if (! $user->hasRole('Sales Officer')) {
+        return;
+    }
+
+    $salesPerson = SalesPerson::query()
+        ->where('user_id', $user->id)
+        ->first();
+
+    if (! $salesPerson) {
+        throw new RuntimeException('Sales officer is not linked to a sales person.');
+    }
+
+  $exists = Warehouse::query()
+    ->where('sales_person_id', $salesPerson->id)
+    ->where('id', $warehouseId)
+    ->exists();
+
+if (! $exists) {
+    throw new RuntimeException(
+        'Sales officer can only use their assigned warehouse.'
+    );
+}
+}
 }

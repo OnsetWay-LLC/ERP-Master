@@ -26,7 +26,20 @@ class PurchaseInvoiceService
     );
         return DB::transaction(function () use ($receipt, $extra) {
             $receipt->load(['items.item', 'taxes', 'fees']);
+$itemTotal = round((float) $receipt->items->sum(function ($item) {
+    return (float) $item->accepted_qty * (float) $item->rate;
+}), 2);
 
+$discountAmount = round((float) $receipt->additional_discount_amount, 2);
+
+$netTotal = $discountAmount > 0
+    ? round($itemTotal - $discountAmount, 2)
+    : $itemTotal;
+
+$taxTotal = round((float) $receipt->tax_total, 2);
+$feesTotal = round((float) $receipt->fees_total, 2);
+
+$grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
             if ($receipt->status !== 'submitted') {
                 throw new RuntimeException('Purchase receipt must be submitted.');
             }
@@ -51,6 +64,13 @@ $paidAmount = 0;
         'payment_mode' => $paymentMode,
         'paid_amount' => $paidAmount,
         'outstanding_amount' => max((float) $exists->grand_total - $paidAmount, 0),
+        'net_total' => $netTotal,
+'tax_total' => $taxTotal,
+'fees_total' => $feesTotal,
+'discount_amount' => $discountAmount,
+'grand_total' => $grandTotal,
+'paid_amount' => 0,
+'outstanding_amount' => $grandTotal,
     ]);
 
     return $exists->fresh()->load(['supplier','items','taxes.account','fees.account']);
@@ -60,7 +80,20 @@ $paidAmount = 0;
            $paymentMode = $extra['payment_mode'] ?? 'credit';
 $paidAmount = 0;
 
-            
+            $itemTotal = round((float) $receipt->items->sum(function ($item) {
+    return (float) $item->accepted_qty * (float) $item->rate;
+}), 2);
+
+$discountAmount = round((float) $receipt->additional_discount_amount, 2);
+
+$netTotal = $discountAmount > 0
+    ? round($itemTotal - $discountAmount, 2)
+    : $itemTotal;
+
+$taxTotal = round((float) $receipt->tax_total, 2);
+$feesTotal = round((float) $receipt->fees_total, 2);
+
+$grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
            
 
             $invoice = PurchaseInvoice::create([
@@ -99,14 +132,12 @@ $paidAmount = 0;
                 'bank_account_id' => $accounts['bank_account_id'],
 
                 'total_qty' => $receipt->total_qty,
-                'net_total' => $receipt->total,
-                'tax_total' => $receipt->tax_total,
-                'fees_total' => $receipt->fees_total,
-                'discount_percentage' => $receipt->additional_discount_percentage,
-                'discount_amount' => $receipt->additional_discount_amount,
-                'grand_total' => $receipt->grand_total,
-                'paid_amount' => 0,
-                'outstanding_amount' => (float) $receipt->grand_total,
+                'net_total' => $netTotal,
+'tax_total' => $taxTotal,
+'fees_total' => $feesTotal,
+'discount_amount' => $discountAmount,
+'grand_total' => $grandTotal,
+'outstanding_amount' => $grandTotal,
 
                 'status' => 'draft',
                 'created_by' => auth('api')->id(),
@@ -340,85 +371,114 @@ private function resolveManualAccount(
 
     return $account->id;
 }
-    private function createJournalEntry(PurchaseInvoice $invoice): JournalEntry
-    {
-        $entry = JournalEntry::create([
-            'company_id' => $invoice->company_id,
-            'entry_number' => $this->generateJournalEntryNumber($invoice->company_id),
-            'entry_date' => $invoice->posting_date,
-            'total_debit' => 0,
-            'total_credit' => 0,
-            'description' => 'Purchase Invoice - ' . $invoice->invoice_number,
-            'status' => 'posted',
-            'created_by' => auth('api')->id(),
-        ]);
+   private function createJournalEntry(PurchaseInvoice $invoice): JournalEntry
+{
+    $invoice->loadMissing(['items', 'taxes', 'fees']);
 
-        $debit = 0;
-        $credit = 0;
+    $itemsTotal = round((float) $invoice->items->sum('amount'), 2);
+
+    $entry = JournalEntry::create([
+        'company_id' => $invoice->company_id,
+        'entry_number' => $this->generateJournalEntryNumber($invoice->company_id),
+        'entry_date' => $invoice->posting_date,
+        'total_debit' => 0,
+        'total_credit' => 0,
+        'description' => 'Purchase Invoice - ' . $invoice->invoice_number,
+        'status' => 'posted',
+        'created_by' => auth('api')->id(),
+    ]);
+
+    $debit = 0;
+    $credit = 0;
+
+    $entry->lines()->create([
+        'company_id' => $invoice->company_id,
+        'account_id' => $invoice->stock_account_id,
+        'debit' => $itemsTotal,
+        'credit' => 0,
+        'note' => 'Inventory / Purchases',
+    ]);
+    $debit += $itemsTotal;
+
+    foreach ($invoice->taxes as $tax) {
+        $amount = abs((float) $tax->amount);
+
+        if ($amount <= 0) {
+            continue;
+        }
 
         $entry->lines()->create([
             'company_id' => $invoice->company_id,
-            'account_id' => $invoice->stock_account_id,
-            'debit' => $invoice->net_total,
+            'account_id' => $tax->account_id,
+            'debit' => $amount,
             'credit' => 0,
-            'note' => 'Inventory / Purchases',
+            'note' => 'Input Tax',
         ]);
-        $debit += $invoice->net_total;
 
-        foreach ($invoice->taxes as $tax) {
-            $entry->lines()->create([
-                'company_id' => $invoice->company_id,
-                'account_id' => $tax->account_id,
-                'debit' => $tax->amount,
-                'credit' => 0,
-                'note' => 'Input Tax',
-            ]);
-            $debit += $tax->amount;
-        }
+        $debit += $amount;
+    }
 
-        foreach ($invoice->fees as $fee) {
-            $entry->lines()->create([
-                'company_id' => $invoice->company_id,
-                'account_id' => $fee->account_id,
-                'debit' => $fee->amount,
-                'credit' => 0,
-                'note' => 'Purchase Fees',
-            ]);
-            $debit += $fee->amount;
-        }
+    foreach ($invoice->fees as $fee) {
+        $amount = abs((float) $fee->amount);
 
-        if ((float) $invoice->discount_amount > 0) {
-            $entry->lines()->create([
-                'company_id' => $invoice->company_id,
-                'account_id' => $invoice->purchase_account_id,
-                'debit' => 0,
-                'credit' => $invoice->discount_amount,
-                'note' => 'Purchase Discount',
-            ]);
-            $credit += $invoice->discount_amount;
+        if ($amount <= 0) {
+            continue;
         }
 
         $entry->lines()->create([
-    'company_id' => $invoice->company_id,
-    'account_id' => $invoice->supplier_payable_account_id,
-    'debit' => 0,
-    'credit' => $invoice->grand_total,
-    'note' => 'Supplier Payable',
-]);
-
-$credit += $invoice->grand_total;
-
-        if (round($debit, 2) !== round($credit, 2)) {
-            throw new RuntimeException('Purchase invoice journal entry is not balanced.');
-        }
-
-        $entry->update([
-            'total_debit' => $debit,
-            'total_credit' => $credit,
+            'company_id' => $invoice->company_id,
+            'account_id' => $fee->account_id,
+            'debit' => $amount,
+            'credit' => 0,
+            'note' => 'Purchase Fees',
         ]);
 
-        return $entry;
+        $debit += $amount;
     }
+
+    $discountAmount = abs((float) $invoice->discount_amount);
+
+    if ($discountAmount > 0) {
+        $entry->lines()->create([
+            'company_id' => $invoice->company_id,
+            'account_id' => $invoice->purchase_account_id,
+            'debit' => 0,
+            'credit' => $discountAmount,
+            'note' => 'Purchase Discount',
+        ]);
+
+        $credit += $discountAmount;
+    }
+
+    $supplierAmount = round(
+        $itemsTotal
+        + abs((float) $invoice->tax_total)
+        + abs((float) $invoice->fees_total)
+        - $discountAmount,
+        2
+    );
+
+    $entry->lines()->create([
+        'company_id' => $invoice->company_id,
+        'account_id' => $invoice->supplier_payable_account_id,
+        'debit' => 0,
+        'credit' => $supplierAmount,
+        'note' => 'Supplier Payable',
+    ]);
+
+    $credit += $supplierAmount;
+
+    if (round($debit, 2) !== round($credit, 2)) {
+        throw new RuntimeException('Purchase invoice journal entry is not balanced.');
+    }
+
+    $entry->update([
+        'total_debit' => round($debit, 2),
+        'total_credit' => round($credit, 2),
+    ]);
+
+    return $entry;
+}
 
     private function createReverseJournalEntry(PurchaseInvoice $invoice): JournalEntry
     {

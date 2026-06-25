@@ -248,63 +248,77 @@ public function cancel(PurchaseOrder $purchaseOrder): PurchaseOrder
         });
     }
 
-    private function calculateTotals(int $companyId, array $data): array
-    {
-        $totalQuantity = 0;
-        $netTotal = 0;
+   private function calculateTotals(int $companyId, array $data): array
+{
+    $totalQuantity = 0;
+    $itemTotal = 0;
 
-        foreach ($data['items'] as $row) {
-            $warehouse = Warehouse::findOrFail($row['target_warehouse_id']);
+    foreach ($data['items'] as $row) {
+        $warehouse = Warehouse::findOrFail($row['target_warehouse_id']);
 
-            if (! $warehouse->is_group) {
-                throw new RuntimeException('Target warehouse must be a main warehouse.');
-            }
-
-            $qty = (float) $row['quantity'];
-            $rate = (float) $row['rate'];
-
-            $totalQuantity += $qty;
-            $netTotal += $qty * $rate;
+        if (! $warehouse->is_group) {
+            throw new RuntimeException('Target warehouse must be a main warehouse.');
         }
 
-        $taxTotal = 0;
+        $qty = (float) $row['quantity'];
+        $rate = (float) $row['rate'];
 
-        foreach (($data['tax_template_ids'] ?? []) as $id) {
-            $template = TaxTemplate::with('lines')
-                ->where('company_id', $companyId)
-                ->findOrFail($id);
-
-            foreach ($template->lines as $line) {
-                $taxTotal += $line->type === 'on_net_total'
-                    ? $netTotal * ((float) $line->tax_rate / 100)
-                    : (float) ($line->amount ?? 0);
-            }
-        }
-
-        $feesTotal = 0;
-
-        foreach (($data['fees_template_ids'] ?? []) as $id) {
-            $template = FeesTemplate::where('company_id', $companyId)->findOrFail($id);
-
-            $feesTotal += $template->type === 'percentage'
-                ? $netTotal * ((float) $template->fees_rate / 100)
-                : (float) ($template->amount ?? 0);
-        }
-
-        $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
-        $discountAmount = $netTotal * ($discountPercentage / 100);
-
-        $grandTotal = $netTotal + $taxTotal + $feesTotal - $discountAmount;
-
-        return [
-            'total_quantity' => $totalQuantity,
-            'net_total' => $netTotal,
-            'tax_total' => $taxTotal,
-            'fees_total' => $feesTotal,
-            'discount_amount' => $discountAmount,
-            'grand_total' => $grandTotal,
-        ];
+        $totalQuantity += $qty;
+        $itemTotal += $qty * $rate;
     }
+
+    $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
+
+    $discountAmount = round(
+        $itemTotal * ($discountPercentage / 100),
+        2
+    );
+
+    $netTotal = round(
+        $itemTotal - $discountAmount,
+        2
+    );
+
+    $taxTotal = 0;
+
+    foreach (($data['tax_template_ids'] ?? []) as $id) {
+        $template = TaxTemplate::with('lines')
+            ->where('company_id', $companyId)
+            ->findOrFail($id);
+
+        foreach ($template->lines as $line) {
+            $taxTotal += $line->type === 'on_net_total'
+                ? $netTotal * ((float) $line->tax_rate / 100)
+                : (float) ($line->amount ?? 0);
+        }
+    }
+
+    $feesTotal = 0;
+
+    foreach (($data['fees_template_ids'] ?? []) as $id) {
+        $template = FeesTemplate::where('company_id', $companyId)
+            ->findOrFail($id);
+
+        $feesTotal += $template->type === 'percentage'
+            ? $netTotal * ((float) $template->fees_rate / 100)
+            : (float) ($template->amount ?? 0);
+    }
+
+    $grandTotal = round(
+        $netTotal + $taxTotal + $feesTotal,
+        2
+    );
+
+    return [
+        'total_quantity' => round($totalQuantity, 2),
+        'item_total' => round($itemTotal, 2),
+        'discount_amount' => $discountAmount,
+        'net_total' => $netTotal,
+        'tax_total' => round($taxTotal, 2),
+        'fees_total' => round($feesTotal, 2),
+        'grand_total' => $grandTotal,
+    ];
+}
 
     private function saveItems(PurchaseOrder $purchaseOrder, array $items): void
     {

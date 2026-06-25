@@ -63,32 +63,40 @@ class PurchaseRegisterReportService
             ->orderBy('id')
             ->get()
             ->map(function ($invoice) {
-                $locale = app()->getLocale();
+    $locale = app()->getLocale();
 
-                return [
-                    'voucher_type' => 'Purchase Invoice',
-                    'voucher' => $invoice->invoice_number,
-                    'posting_date' => $invoice->posting_date,
+    $discount = abs((float) $invoice->discount_amount);
+    $totalAmount = (float) $invoice->net_total;
 
-                    'supplier_name' => $locale === 'ar'
-                        ? ($invoice->supplier?->supplier_name_ar ?? $invoice->supplier?->supplier_name_en)
-                        : ($invoice->supplier?->supplier_name_en ?? $invoice->supplier?->supplier_name_ar),
+    $calculatedNetTotal = $discount > 0
+        ? $totalAmount - $discount
+        : $totalAmount;
 
-                    'payable_account' => $locale === 'ar'
-                        ? ($invoice->supplierPayableAccount?->name_ar ?? $invoice->supplierPayableAccount?->name_en)
-                        : ($invoice->supplierPayableAccount?->name_en ?? $invoice->supplierPayableAccount?->name_ar),
+    return [
+        'voucher_type' => 'Purchase Invoice',
+        'voucher' => $invoice->invoice_number,
+        'posting_date' => $invoice->posting_date,
 
-                    'purchase_order' => $invoice->purchaseOrder?->series ?? '-',
+        'supplier_name' => $locale === 'ar'
+            ? ($invoice->supplier?->supplier_name_ar ?? $invoice->supplier?->supplier_name_en)
+            : ($invoice->supplier?->supplier_name_en ?? $invoice->supplier?->supplier_name_ar),
 
-                    'stock_account' => (float) $invoice->net_total,
-                    'vat' => (float) $invoice->tax_total,
-                    'fees' => (float) $invoice->fees_total,
-                    'discount' => (float) $invoice->discount_amount,
-                    'net_total' => (float) $invoice->net_total,
-                    'grand_total' => (float) $invoice->grand_total,
-                    'outstanding' => (float) $invoice->outstanding_amount,
-                ];
-            });
+        'payable_account' => $locale === 'ar'
+            ? ($invoice->supplierPayableAccount?->name_ar ?? $invoice->supplierPayableAccount?->name_en)
+            : ($invoice->supplierPayableAccount?->name_en ?? $invoice->supplierPayableAccount?->name_ar),
+
+        'purchase_order' => $invoice->purchaseOrder?->series ?? '-',
+
+        'stock_account' => (float) $invoice->net_total,
+        'vat' => (float) $invoice->tax_total,
+        'fees' => (float) $invoice->fees_total,
+        'discount' => (float) $invoice->discount_amount,
+        'net_total' => $calculatedNetTotal,
+        'grand_total' => (float) $invoice->grand_total,
+        'outstanding' => (float) $invoice->outstanding_amount,
+    ];
+});
+             ;
     }
 
     private function getPurchaseReturnRows(

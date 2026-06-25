@@ -13,6 +13,7 @@ protected $fillable = [
     'account_id',
     'fees_rate',
     'amount',
+    'is_refundable',
     'is_active',
     'created_by',
 ];

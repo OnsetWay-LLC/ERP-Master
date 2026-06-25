@@ -53,7 +53,10 @@ class UpdateFeesTemplateRequest extends FormRequest
                 'numeric',
                 'min:0',
             ],
-
+'is_refundable' => [
+    'nullable',
+    'boolean',
+],
             'is_active' => ['nullable', 'boolean'],
         ];
     }

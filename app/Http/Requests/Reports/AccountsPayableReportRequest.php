@@ -4,11 +4,11 @@ namespace App\Http\Requests\Reports;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class ItemWisePurchaseRegisterReportRequest extends FormRequest
+class AccountsPayableReportRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth('api')->user()?->can( 'screen.item_wise_purchase_register_report');
+        return auth('api')->user()?->can('screen.accounts_payable_report') === true;
     }
 
     public function rules(): array
@@ -16,8 +16,7 @@ class ItemWisePurchaseRegisterReportRequest extends FormRequest
         return [
             'from_date' => ['required', 'date'],
             'to_date' => ['required', 'date', 'after_or_equal:from_date'],
-            'supplier_id' => ['nullable', 'exists:suppliers,id'],
-            'item_id' => ['nullable', 'exists:items,id'],
+            'supplier_id' => ['nullable', 'integer', 'exists:suppliers,id'],
         ];
     }
 }

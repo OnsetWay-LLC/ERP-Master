@@ -70,7 +70,13 @@ use App\Http\Controllers\Api\Reports\AssetDepreciationBalanceReportController;
 use App\Http\Controllers\Api\FinancialYear\FinancialYearController;
 use App\Http\Controllers\Api\TaxDeclarationSetting\TaxDeclarationSettingController;
 use App\Http\Controllers\Api\Reports\TaxDeclarationReportController;
-
+use App\Http\Controllers\Api\Reports\GrossProfitReportController;
+use App\Http\Controllers\Api\Reports\OwnerEquityReportController;
+use App\Http\Controllers\Api\Reports\StockLedgerReportController;
+use App\Http\Controllers\Api\Reports\AccountsPayableReportController;
+use App\Http\Controllers\Api\Reports\WarehouseWiseStockBalanceReportController;
+use App\Http\Controllers\Api\AuditReport\AuditReportController;
+use App\Http\Controllers\Api\Reports\BalanceSheetReportController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -78,16 +84,12 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:login');
-
-   
-
     Route::post('/email/resend', [AuthController::class, 'resendVerificationEmail']);
-
     Route::post('/forgot-password/send-code', [PasswordController::class, 'forgotPassword']);
     Route::post('/reset-password', [PasswordController::class, 'resetPassword']);
 });
 //companies routes
-Route::middleware(['auth:api', 'permission:screen.company,api', 'locale'])
+Route::middleware(['auth:api', 'permission:screen.company,api', 'locale','audit.log'])
     ->group(function () {
 
         Route::get('/companies/lookups/countries', [CompanyController::class, 'countries']);
@@ -100,14 +102,14 @@ Route::post(
     [PayrollController::class, 'generate']
 );
 Route::prefix('payroll-tax-settings')
-    ->middleware(['auth:api', 'permission:screen.payroll_tax_settings,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.payroll_tax_settings,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [PayrollTaxSettingController::class, 'show']);
         Route::post('/', [PayrollTaxSettingController::class, 'storeOrUpdate']);
     });
     
   Route::prefix('departments')
-    ->middleware(['auth:api', 'permission:screen.departments,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.departments,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [DepartmentController::class, 'index']);
         Route::post('/', [DepartmentController::class, 'store']);
@@ -116,7 +118,7 @@ Route::prefix('payroll-tax-settings')
         Route::delete('/{department}', [DepartmentController::class, 'destroy']);
     });
     Route::prefix('employees')
-    ->middleware(['auth:api', 'permission:screen.employees,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.employees,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [EmployeeController::class, 'index']);
         Route::post('/', [EmployeeController::class, 'store']);
@@ -126,7 +128,7 @@ Route::prefix('payroll-tax-settings')
         Route::post('/{employee}/restore', [EmployeeController::class, 'restore'])->withTrashed();
     });
    Route::prefix('employee-leaves')
-    ->middleware(['auth:api', 'permission:screen.employees,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.employees,api', 'locale','audit.log'])
     ->group(function () {
       Route::get('/employees/search', [EmployeeLeaveController::class, 'searchEmployees']);
 Route::get('/employees/{employee}/leave-options', [EmployeeLeaveController::class, 'leaveOptions']);
@@ -136,7 +138,7 @@ Route::post('/', [EmployeeLeaveController::class, 'store']);
 Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
     });
    Route::prefix('users')
-    ->middleware(['auth:api', 'permission:screen.users,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.users,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [UserController::class, 'index']);
         Route::get('/employee-by-national-id/{nationalId}', [UserController::class, 'employeeByNationalId']);
@@ -146,7 +148,7 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
         Route::delete('/{user}', [UserController::class, 'destroy']);
     });
     Route::prefix('roles')
-    ->middleware(['auth:api', 'permission:screen.roles,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.roles,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [RoleController::class, 'index']);
         Route::post('/', [RoleController::class, 'store']);
@@ -158,7 +160,7 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
         Route::get('/permissions/all', [RoleController::class, 'permissions']);
     });
     Route::prefix('customers')
-    ->middleware(['auth:api', 'permission:screen.customers,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.customers,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [CustomerController::class, 'index']);
         Route::post('/', [CustomerController::class, 'store']);
@@ -168,7 +170,7 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
             Route::post('/{customer}/restore', [CustomerController::class, 'restore'])->withTrashed();
     });
     Route::prefix('suppliers')
-    ->middleware(['auth:api', 'permission:screen.suppliers,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.suppliers,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [SupplierController::class, 'index']);
         Route::post('/', [SupplierController::class, 'store']);
@@ -178,7 +180,7 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
         Route::post('/{supplier}/restore', [SupplierController::class, 'restore'])->withTrashed();
     });
     Route::prefix('warehouses')
-    ->middleware(['auth:api', 'permission:screen.warehouses,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.warehouses,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [WarehouseController::class, 'index']);
         Route::post('/', [WarehouseController::class, 'store']);
@@ -187,7 +189,7 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
         Route::delete('/{warehouse}', [WarehouseController::class, 'destroy']);
     });
     Route::prefix('item-groups')
-    ->middleware(['auth:api', 'permission:screen.item_groups,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.item_groups,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [ItemGroupController::class, 'index']);
         Route::post('/', [ItemGroupController::class, 'store']);
@@ -198,7 +200,7 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
     });
 
 Route::prefix('items')
-    ->middleware(['auth:api', 'permission:screen.items,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.items,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/export/excel', [ItemController::class, 'exportExcel']);
         Route::post('/import/excel', [ItemController::class, 'importExcel']);
@@ -214,7 +216,7 @@ Route::prefix('items')
     });
     
     Route::prefix('accounting/chart-of-accounts')
-    ->middleware(['auth:api', 'permission:screen.chart_of_accounts,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.chart_of_accounts,api', 'locale','audit.log'])
     ->group(function () {
     Route::get('/', [ChartOfAccountController::class, 'index']);
     Route::get('/tree', [ChartOfAccountController::class, 'tree']);
@@ -227,14 +229,14 @@ Route::prefix('items')
 );
 });
 Route::prefix('accounting/default-accounts')
-->middleware(['auth:api', 'permission:screen.default_accounts,api', 'locale'])
+->middleware(['auth:api', 'permission:screen.default_accounts,api', 'locale','audit.log'])
 ->group(function () {
     Route::get('/', [CompanyAccountSettingController::class, 'show']);
     Route::post('/', [CompanyAccountSettingController::class, 'store']);
     Route::put('/', [CompanyAccountSettingController::class, 'update']);
 });
  Route::prefix('tax-templates')
-    ->middleware(['auth:api', 'permission:screen.tax,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.tax,api', 'locale','audit.log'])
     ->group(function () {
            Route::get('/', [TaxTemplateController::class, 'index']);
     Route::post('/', [TaxTemplateController::class, 'store']);
@@ -245,7 +247,7 @@ Route::prefix('accounting/default-accounts')
     });
 
     Route::prefix('inventory/material-requests')
-    ->middleware(['auth:api', 'permission:screen.material_requests,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.material_requests,api', 'locale','audit.log'])
     ->group(function () {
     Route::post('/', [MaterialRequestController::class, 'store']);
     Route::post('/{id}/submit', [MaterialRequestController::class, 'submit']);
@@ -253,7 +255,7 @@ Route::prefix('accounting/default-accounts')
 Route::post('/{id}/cancel', [MaterialRequestController::class, 'cancel']);
 });
 Route::prefix('inventory/purchase-orders')
-->middleware(['auth:api', 'permission:screen.purchase_orders,api', 'locale'])
+->middleware(['auth:api', 'permission:screen.purchase_orders,api', 'locale','audit.log'])
 ->group(function () {
     Route::post('/', [PurchaseOrderController::class, 'store']);
         Route::get('/{purchaseOrder}', [PurchaseOrderController::class, 'show']);
@@ -264,7 +266,7 @@ Route::prefix('inventory/purchase-orders')
 
 });
 Route::prefix('inventory/purchase-receipts')
-->middleware(['auth:api', 'permission:screen.purchase_receipts,api', 'locale'])
+->middleware(['auth:api', 'permission:screen.purchase_receipts,api', 'locale','audit.log'])
 ->group(function () {
         Route::get('/',[PurchaseReceiptController::class, 'index']);
         Route::post('/', [PurchaseReceiptController::class, 'store']);
@@ -273,7 +275,7 @@ Route::prefix('inventory/purchase-receipts')
         Route::post('/{purchaseReceipt}/submit', [PurchaseReceiptController::class, 'submit']);
         Route::post('/{purchaseReceipt}/cancel', [PurchaseReceiptController::class, 'cancel']);
     });
-    Route::middleware(['auth:api', 'permission:screen.purchase_invoices', 'locale'])->group(function () {
+    Route::middleware(['auth:api', 'permission:screen.purchase_invoices', 'locale','audit.log'])->group(function () {
     Route::get('/purchase-invoices', [PurchaseInvoiceController::class, 'index']);
     Route::post('/purchase-invoices', [PurchaseInvoiceController::class, 'store']);
     Route::get('/purchase-invoices/accounts', [PurchaseInvoiceController::class, 'accounts']);
@@ -284,7 +286,7 @@ Route::prefix('inventory/purchase-receipts')
     Route::get('/purchase-invoices/{purchaseInvoice}/pdf', [PurchaseInvoiceController::class, 'pdf']);
 });
 Route::prefix('shifts')
-    ->middleware(['auth:api', 'permission:screen.shifts,api', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.shifts,api', 'locale','audit.log'])
     ->group(function () {
         Route::get('/', [ShiftController::class, 'index']);
         Route::post('/', [ShiftController::class, 'store']);
@@ -292,33 +294,33 @@ Route::prefix('shifts')
         Route::put('/{shift}', [ShiftController::class, 'update']);
         Route::delete('/{shift}', [ShiftController::class, 'destroy']);
     });
-    Route::middleware(['auth:api', 'permission:screen.fees_templates,api', 'locale'])->group(function () {
+    Route::middleware(['auth:api', 'permission:screen.fees_templates,api', 'locale','audit.log'])->group(function () {
     Route::apiResource('fees-templates', FeesTemplateController::class);
 });
-    Route::middleware(['auth:api', 'permission:screen.assets', 'locale'])->group(function () {
+    Route::middleware(['auth:api', 'permission:screen.assets', 'locale','audit.log'])->group(function () {
     Route::apiResource('asset-categories', AssetCategoryController::class);
     Route::get(
     '/assets/{id}/depreciation-journal-template',
     [AssetController::class, 'depreciationJournalTemplate']
 );
 });
-    Route::middleware(['auth:api', 'permission:screen.asset_items', 'locale'])->group(function () {
+    Route::middleware(['auth:api', 'permission:screen.asset_items', 'locale','audit.log'])->group(function () {
     Route::apiResource('asset-items', AssetItemController::class);
 });
-Route::middleware(['auth:api', 'permission:screen.asset_locations', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.asset_locations', 'locale','audit.log'])->group(function () {
     Route::apiResource('asset-locations', AssetLocationController::class);
 });
-Route::middleware(['auth:api', 'permission:screen.assets', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.assets', 'locale','audit.log'])->group(function () {
     Route::apiResource('assets', AssetController::class);
     Route::post('assets/{asset}/submit', [AssetController::class, 'submit']);
 });
-Route::middleware(['auth:api', 'permission:screen.bank', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.bank', 'locale','audit.log'])->group(function () {
     Route::apiResource('banks', BankController::class);
 });
-Route::middleware(['auth:api', 'permission:screen.bank_accounts', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.bank_accounts', 'locale','audit.log'])->group(function () {
     Route::apiResource('bank-accounts', BankAccountController::class);
 });
-Route::middleware(['auth:api', 'permission:screen.stock_entries', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.stock_entries', 'locale','audit.log'])->group(function () {
     Route::get('stock-entries', [StockEntryController::class, 'index']);
     Route::post('stock-entries', [StockEntryController::class, 'store']);
     Route::get('stock-entries/{id}', [StockEntryController::class, 'show']);
@@ -332,7 +334,7 @@ Route::middleware(['auth:api', 'permission:screen.stock_entries', 'locale'])->gr
     [StockReportController::class, 'stockBalance']
 );
 });
-Route::middleware(['auth:api', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'locale','audit.log'])->group(function () {
     Route::get('journal-entries/accounts/dropdown', [JournalEntryController::class, 'accountsDropdown'])
         ->middleware('permission:screen.journal_entries.view');
 
@@ -357,7 +359,7 @@ Route::middleware(['auth:api', 'locale'])->group(function () {
     Route::post('journal-entries/{id}/cancel', [JournalEntryController::class, 'cancel'])
         ->middleware('permission:screen.journal_entries.cancel');
 });
-Route::middleware(['auth:api', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'locale','audit.log'])->group(function () {
     Route::get('general-ledger/accounts/dropdown', [GeneralLedgerController::class, 'accountsDropdown'])
         ->middleware('permission:screen.general_ledger');
 
@@ -369,18 +371,18 @@ Route::middleware(['auth:api', 'locale'])->group(function () {
 Route::get('general-ledger/export/pdf', [GeneralLedgerController::class, 'exportPdf'])
     ->middleware('permission:screen.general_ledger');
 });
-Route::middleware(['auth:api', 'permission:screen.bank_reconciliation'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.bank_reconciliation','locale','audit.log'])->group(function () {
     Route::post('bank-reconciliation/calculate', [BankReconciliationController::class, 'calculate']);
 });
-Route::middleware(['auth:api', 'permission:screen.trial_balance', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.trial_balance', 'locale','audit.log'])->group(function () {
     Route::get('/reports/trial-balance', [TrialBalanceController::class, 'report']);
     Route::get('/reports/trial-balance/pdf', [TrialBalanceController::class, 'exportPdf']);
 });
-Route::middleware(['auth:api', 'permission:screen.profit_and_loss', 'locale'])->group(function () {
+Route::middleware(['auth:api', 'permission:screen.profit_and_loss', 'locale','audit.log'])->group(function () {
     Route::get('/reports/profit-loss', [ProfitLossController::class, 'report']);
     Route::get('/reports/profit-loss/pdf', [ProfitLossController::class, 'exportPdf']);
 });
-Route::middleware(['auth:api', 'permission:screen.sales_orders', 'locale'])
+Route::middleware(['auth:api', 'permission:screen.sales_orders', 'locale','audit.log'])
     ->prefix('sales-orders')
     ->group(function () {
         Route::get('/', [SalesOrderController::class, 'index']);
@@ -392,14 +394,14 @@ Route::middleware(['auth:api', 'permission:screen.sales_orders', 'locale'])
         Route::post('/{salesOrder}/submit', [SalesOrderController::class, 'submit']);
         Route::post('/{salesOrder}/cancel', [SalesOrderController::class, 'cancel']);
     });
-Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale'])
+Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale','audit.log'])
     ->prefix('pick-lists')
     ->group(function () {
         Route::get('/', [PickListController::class, 'index']);
         Route::get('/{pickList}', [PickListController::class, 'show']);
         Route::post('/{pickList}/cancel', [PickListController::class, 'cancel']);
     });
-    Route::middleware(['auth:api', 'permission:screen.delivery_notes', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.delivery_notes', 'locale','audit.log'])
     ->prefix('delivery-notes')
     ->group(function () {
         Route::get('/', [DeliveryNoteController::class, 'index']);
@@ -411,7 +413,7 @@ Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale'])
         Route::post('/{deliveryNote}/cancel', [DeliveryNoteController::class, 'cancel']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.monthly_distributions', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.monthly_distributions', 'locale','audit.log'])
         ->prefix('monthly-distributions')
         ->group(function () {
             Route::get('/', [MonthlyDistributionController::class, 'index']);
@@ -421,7 +423,7 @@ Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale'])
             Route::delete('/{monthlyDistribution}', [MonthlyDistributionController::class, 'destroy']);
         });
         Route::prefix('sales-persons')
-    ->middleware(['auth:api', 'permission:screen.sales_persons', 'locale'])
+    ->middleware(['auth:api', 'permission:screen.sales_persons', 'locale','audit.log'])
     ->group(function () {
 
         Route::get('/', [SalesPersonController::class, 'index']);
@@ -433,7 +435,7 @@ Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale'])
         Route::delete('{salesPerson}', [SalesPersonController::class, 'destroy']);
     });
         
- Route::middleware(['auth:api', 'locale'])->group(function () {
+ Route::middleware(['auth:api', 'locale','audit.log'])->group(function () {
     Route::prefix('sales-invoices')
         ->middleware('permission:screen.sales_invoices')
         ->group(function () {
@@ -447,7 +449,7 @@ Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale'])
 );
             Route::delete('/{salesInvoice}', [SalesInvoiceController::class, 'destroy']);
         });
-        Route::middleware(['auth:api','permission:screen.sales_payments', 'locale'])->group(function () {
+        Route::middleware(['auth:api','permission:screen.sales_payments', 'locale','audit.log'])->group(function () {
         Route::apiResource('sales-payments', SalesPaymentController::class)
     ->only(['index', 'store', 'show']);
 
@@ -455,7 +457,7 @@ Route::post('sales-payments/{salesPayment}/submit', [SalesPaymentController::cla
 Route::post('sales-payments/{salesPayment}/cancel', [SalesPaymentController::class, 'cancel']);
         });
 
-       Route::middleware(['auth:api', 'permission:screen.sales_person_performance_report', 'locale'])
+       Route::middleware(['auth:api', 'permission:screen.sales_person_performance_report', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/sales-person-performance', [SalesPersonPerformanceReportController::class, 'index']);
@@ -468,31 +470,31 @@ Route::post('sales-payments/{salesPayment}/cancel', [SalesPaymentController::cla
             Route::post('/{discountApprovalRequest}/respond', [DiscountApprovalController::class, 'respond']);
         });
 });
-    Route::middleware([ 'auth:api', 'permission:screen.discount_settings', 'locale'])
+    Route::middleware([ 'auth:api', 'permission:screen.discount_settings', 'locale','audit.log'])
     ->prefix('discount-settings')->group(function () {
     Route::post('/', [DiscountSettingController::class, 'store']);
-    Route::get('/', [DiscountSettingController::class, 'show']);
+    Route::get('/{discountSetting}', [DiscountSettingController::class, 'show']);
     Route::put('/{discountSetting}', [DiscountSettingController::class, 'update']);
     Route::delete('/{discountSetting}', [DiscountSettingController::class, 'destroy']);
 
 });
-Route::middleware(['auth:api', 'locale'])->prefix('notifications')->group(function () {
+Route::middleware(['auth:api', 'locale','audit.log'])->prefix('notifications')->group(function () {
     Route::get('/', [NotificationController::class, 'index']);
     Route::get('/unread', [NotificationController::class, 'unread']);
     Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
 });
-Route::middleware(['auth:api','permission:screen.financial_reports','locale'])
+Route::middleware(['auth:api','permission:screen.financial_reports','locale','audit.log'])
 ->prefix('reports')->group(function () {
 Route::get( '/customer-ledger/pdf', [CustomerLedgerReportController::class, 'pdf']);
 });
 
-Route::middleware(['auth:api','permission:screen.supplier_ledger_report','locale'])
+Route::middleware(['auth:api','permission:screen.supplier_ledger_reports','locale','audit.log'])
 ->prefix('reports')->group(function () {
 Route::get( '/supplier-ledger/pdf', [SupplierLedgerReportController::class, 'pdf']);
 });
 
- Route::middleware([ 'auth:api', 'permission:screen.sales_returns', 'locale'])
+ Route::middleware([ 'auth:api', 'permission:screen.sales_returns', 'locale','audit.log'])
     ->prefix('sales-returns')->group(function () {
 Route::post('/', [SalesReturnController::class, 'store']);
 Route::get('/{salesReturn}', [SalesReturnController::class, 'show']);
@@ -502,35 +504,35 @@ Route::post('/{salesReturn}/cancel', [SalesReturnController::class, 'cancel']);
 Route::delete('/{salesReturn}', [SalesReturnController::class, 'destroy']);
 });
 
-Route::middleware(['auth:api', 'permission:screen.AccountsReceivableReport', 'locale'])
+Route::middleware(['auth:api', 'permission:screen.AccountsReceivableReport', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/accounts-receivable/pdf', [AccountsReceivableReportController::class, 'pdf']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.SalesRegisterReport', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.SalesRegisterReport', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/sales-register/pdf', [SalesRegisterReportController::class, 'pdf']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.ItemWiseSalesRegisterReport', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.ItemWiseSalesRegisterReport', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/item-wise-sales-register/pdf', [ItemWiseSalesRegisterReportController::class, 'pdf']);
     });
-    Route::middleware(['auth:api', 'permission:screen.sales_payment_summary_report', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.sales_payment_summary_report', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/sales-payment-summary/pdf', [SalesPaymentSummaryReportController::class, 'pdf']);
     });
-    Route::middleware(['auth:api', 'permission:screen.purchase_reports', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.purchase_reports', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/purchase-register/pdf', [PurchaseRegisterReportController::class, 'pdf']);
     });
     
-    Route::middleware(['auth:api','permission:screen.purchase_payments', 'locale'])
+    Route::middleware(['auth:api','permission:screen.purchase_payments', 'locale','audit.log'])
     ->prefix('payment-entries')
     ->group(function () {
         Route::post('/from-purchase-invoice', [PaymentEntryController::class, 'storeFromPurchaseInvoice']);
@@ -544,7 +546,7 @@ Route::middleware(['auth:api', 'permission:screen.AccountsReceivableReport', 'lo
         Route::get('/{paymentEntry}/print', [PaymentEntryController::class, 'print']);
         Route::delete('/{paymentEntry}', [PaymentEntryController::class, 'destroy']);
     });
-  Route::middleware([ 'auth:api', 'permission:screen.purchase_returns', 'locale'])->prefix('purchase-returns')->group(function () {
+  Route::middleware([ 'auth:api', 'permission:screen.purchase_returns', 'locale','audit.log'])->prefix('purchase-returns')->group(function () {
     Route::get('/from-purchase-invoice/{purchaseInvoice}', [PurchaseReturnController::class, 'getDataFromPurchaseInvoice']);
     Route::post( '/',  [PurchaseReturnController::class, 'store']);
     Route::put('/{purchaseReturn}', [PurchaseReturnController::class, 'update'] );
@@ -555,7 +557,7 @@ Route::middleware(['auth:api', 'permission:screen.AccountsReceivableReport', 'lo
 });
 Route::get( '/reports/item-wise-purchase-register/pdf', [ItemWisePurchaseRegisterReportController::class, 'pdf'])->middleware([  'auth:api',  'permission:screen.item_wise_purchase_register_report', 'locale']);
 
-Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'locale'])
+Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'locale','audit.log'])
     ->prefix('asset-capitalizations')
     ->group(function () {
         Route::get('/lookups/target-assets', [AssetCapitalizationController::class, 'targetAssets']);
@@ -568,7 +570,7 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::post('/{assetCapitalization}/submit', [AssetCapitalizationController::class, 'submit']);
         Route::delete('/{assetCapitalization}', [AssetCapitalizationController::class, 'destroy']);
     });
-    Route::middleware(['auth:api', 'permission:screen.asset_value_adjustments', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.asset_value_adjustments', 'locale','audit.log'])
     ->prefix('asset-value-adjustments')
     ->group(function () {
         Route::get('/lookups/assets', [AssetValueAdjustmentController::class, 'availableAssets']);
@@ -582,7 +584,7 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::delete('/{assetValueAdjustment}', [AssetValueAdjustmentController::class, 'destroy']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.asset_repair', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.asset_repair', 'locale','audit.log'])
     ->prefix('asset-repairs')
     ->group(function () {
         Route::get('/lookups/assets', [AssetRepairController::class, 'availableAssets']);
@@ -596,7 +598,7 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::delete('/{assetRepair}', [AssetRepairController::class, 'destroy']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.asset_Sale', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.asset_Sale', 'locale','audit.log'])
     ->prefix('asset-sales')
     ->group(function () {
         Route::get('/lookups/assets', [AssetSaleController::class, 'availableAssets']);
@@ -614,7 +616,7 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
     Route::delete('/{assetSale}', [AssetSaleController::class, 'destroy']);
     });
    
-    Route::middleware(['auth:api', 'permission:screen.assets.scrappings', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.assets.scrappings', 'locale','audit.log'])
     ->prefix('asset-scrappings')
     ->group(function () {
         Route::get('/lookups/assets', [AssetScrappingController::class, 'availableAssets']);
@@ -627,24 +629,24 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::delete('/{assetScrapping}', [AssetScrappingController::class, 'destroy']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.fixed.asset.register.report', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.fixed.asset.register.report', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/fixed-asset-register/pdf', [FixedAssetRegisterReportController::class, 'pdf']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.asset.depreciation.ledger.report', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.asset.depreciation.ledger.report', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/asset-depreciation-ledger/pdf', [AssetDepreciationLedgerReportController::class, 'pdf']);
     });
-    Route::middleware(['auth:api', 'permission:screen.asset.depreciation.balance.report', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.asset.depreciation.balance.report', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
         Route::get('/asset-depreciation-balance/pdf', [AssetDepreciationBalanceReportController::class, 'pdf']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.account_closing', 'locale'])
+    Route::middleware(['auth:api', 'permission:screen.account_closing', 'locale','audit.log'])
     ->prefix('financial-years')
     ->group(function () {
         Route::get('/', [FinancialYearController::class, 'index']);
@@ -655,12 +657,53 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::post('/{financialYear}/reopen', [FinancialYearController::class, 'reopen']);
         Route::delete('/{financialYear}', [FinancialYearController::class, 'destroy']);
     });
-    Route::middleware(['auth:api','permission:screen.tax_declaration_settings'])->group(function () {
+    Route::middleware(['auth:api','permission:screen.tax_declaration_settings','audit.log'])->group(function () {
     Route::get('/tax-declaration-setting', [TaxDeclarationSettingController::class, 'show']);
     Route::post('/tax-declaration-setting', [TaxDeclarationSettingController::class, 'store']);
     Route::put('/tax-declaration-setting', [TaxDeclarationSettingController::class, 'update']);
 });
 
-Route::middleware(['auth:api','permission:screen.tax_declaration_reports'])->group(function () {
+Route::middleware(['auth:api','permission:screen.tax_declaration_reports','audit.log'])->group(function () {
     Route::get('/tax-declaration-report/pdf', [TaxDeclarationReportController::class, 'pdf']);
 });
+
+Route::middleware(['auth:api','permission:screen.gross_profit_report','audit.log'])->group(function () {
+    Route::get('/gross-profit-report', [GrossProfitReportController::class, 'report']);
+    Route::get('/gross-profit-report/pdf', [GrossProfitReportController::class, 'exportPdf']);
+});
+
+
+Route::middleware(['auth:api','permission:screen.owner_equity_report','audit.log'])->group(function () {
+    Route::get('/owner-equity-report', [OwnerEquityReportController::class, 'report']);
+    Route::get('/owner-equity-report/pdf', [OwnerEquityReportController::class, 'exportPdf']);
+});
+
+Route::middleware(['auth:api','permission:screen.stock_ledger_report','audit.log'])->group(function () {
+    Route::get('/reports/stock-ledger/pdf', [StockLedgerReportController::class, 'pdf']);
+});
+
+
+Route::middleware([ 'auth:api','permission:screen.accounts_payable_report','audit.log'])->group(function (){
+Route::get('/reports/accounts-payable', [AccountsPayableReportController::class, 'report']);
+Route::get('/reports/accounts-payable/pdf', [AccountsPayableReportController::class, 'pdf']);
+});
+
+
+Route::middleware([ 'auth:api','permission:screen.warehouse_wise_stock_balance_report','audit.log'])->group(function (){
+Route::get('/reports/warehouse-wise-stock-balance', [WarehouseWiseStockBalanceReportController::class, 'report']);
+Route::get('/reports/warehouse-wise-stock-balance/pdf', [WarehouseWiseStockBalanceReportController::class, 'pdf']);
+});
+
+
+
+Route::middleware(['auth:api', 'permission:screen.audit_report', 'locale'])
+    ->group(function () {
+        Route::get('/audit-report', [AuditReportController::class, 'index']);
+          Route::get('/audit-report/pdf', [AuditReportController::class, 'pdf']);
+    });
+
+  Route::middleware(['auth:api', 'role:CFO|Chief Accountant', 'locale'])
+    ->group(function () {
+        Route::get('/reports/balance-sheet/pdf', [BalanceSheetReportController::class, 'pdf']);
+    });
+

@@ -48,17 +48,16 @@ class TrialBalanceService
             );
         }
 
-        $rows = collect();
+        $parentRows = collect();
+        $childRows = collect();
 
-       foreach ($balances as $accountId => $balance) {
+        foreach ($balances as $accountId => $balance) {
             $account = $accounts[$accountId] ?? null;
 
             if (! $account) {
                 continue;
             }
-if ($account->account_level !== 'parent') {
-    continue;
-}
+
             if ($balance > 0) {
                 $debitBalance = $balance;
                 $creditBalance = 0;
@@ -67,32 +66,51 @@ if ($account->account_level !== 'parent') {
                 $creditBalance = abs($balance);
             }
 
-            $rows->push([
+            $row = [
                 'account_id' => $account->id,
                 'parent_id' => $account->parent_id,
                 'account_number' => $account->account_number,
                 'account_name_ar' => $account->name_ar,
                 'account_name_en' => $account->name_en,
+                'root_category' => $account->root_category,
+                'sub_category' => $account->sub_category,
                 'account_type' => $account->account_type,
                 'account_level' => $account->account_level,
                 'debit_balance' => round($debitBalance, 2),
                 'credit_balance' => round($creditBalance, 2),
-            ]);
+            ];
+
+            if ($account->account_level === 'parent') {
+                $parentRows->push($row);
+            }
+
+            if ($account->account_level === 'child') {
+                $childRows->push($row);
+            }
         }
 
-        $rows = $rows
+        $parentRows = $parentRows
             ->sortBy('account_number')
             ->values();
 
-        $totalDebit = round($rows->sum('debit_balance'), 2);
-        $totalCredit = round($rows->sum('credit_balance'), 2);
+        $childRows = $childRows
+            ->sortBy('account_number')
+            ->values();
+
+        $totalDebit = round($parentRows->sum('debit_balance'), 2);
+        $totalCredit = round($parentRows->sum('credit_balance'), 2);
         $difference = round($totalDebit - $totalCredit, 2);
 
         return [
             'from_date' => $fromDate,
             'to_date' => $toDate,
 
-            'rows' => $rows,
+            // عشان ما نخرب أي تقرير قديم
+            'rows' => $parentRows,
+
+            // الجديد
+            'parent_rows' => $parentRows,
+            'child_rows' => $childRows,
 
             'totals' => [
                 'total_debit' => $totalDebit,
@@ -102,7 +120,7 @@ if ($account->account_level !== 'parent') {
 
             'is_balanced' => $difference == 0.00,
 
-            'message' => $rows->isEmpty()
+            'message' => $parentRows->isEmpty()
                 ? 'No data found.'
                 : ($difference == 0.00
                     ? 'Trial balance is balanced.'

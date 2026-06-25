@@ -33,11 +33,11 @@ class SupplierLedgerReportService
                 ->whereBetween('posting_date', [$fromDate, $toDate])
                 ->sum('grand_total');
 
-            $paidAmount = (float) PaymentEntry::query()
-                ->where('supplier_id', $supplier->id)
-                ->where('status', 'submitted')
-                ->whereBetween('posting_date', [$fromDate, $toDate])
-                ->sum('paid_amount');
+           $paidAmount = (float) PurchaseInvoice::query()
+    ->where('supplier_id', $supplier->id)
+    ->where('status', 'submitted')
+    ->whereBetween('posting_date', [$fromDate, $toDate])
+    ->sum('paid_amount');
 
             $debitNote = (float) PurchaseReturn::query()
                 ->where('supplier_id', $supplier->id)
