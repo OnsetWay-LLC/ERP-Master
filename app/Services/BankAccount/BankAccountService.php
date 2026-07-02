@@ -4,6 +4,7 @@ namespace App\Services\BankAccount;
 
 use App\Models\Bank;
 use App\Models\BankAccount;
+use App\Models\ChartOfAccount;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -20,31 +21,52 @@ class BankAccountService
             ->get();
     }
 
-    public function create(array $data, int $companyId, ?int $createdBy = null): BankAccount
-    {
-        return DB::transaction(function () use ($data, $companyId, $createdBy) {
-            $this->validateBank($companyId, (int) $data['bank_id']);
+  public function create(array $data, int $companyId, ?int $createdBy = null): BankAccount
+{
+    return DB::transaction(function () use ($data, $companyId, $createdBy) {
+        $this->validateBank($companyId, (int) $data['bank_id']);
 
-            $data['company_id'] = $companyId;
-            $data['created_by'] = $createdBy;
+        $isCompany = (bool) ($data['is_company'] ?? false);
 
-            return BankAccount::create($data)->load(['bank', 'chartAccount']);
-        });
-    }
+        if ($isCompany) {
+            $this->validateCompanyAccount($companyId, $data['account_id'] ?? null);
+        } else {
+            $data['account_id'] = null;
+        }
 
-    public function update(BankAccount $bankAccount, array $data): BankAccount
-    {
-        return DB::transaction(function () use ($bankAccount, $data) {
-            if (isset($data['bank_id'])) {
-                $this->validateBank($bankAccount->company_id, (int) $data['bank_id']);
-            }
+        $data['company_id'] = $companyId;
+        $data['created_by'] = $createdBy;
 
-            $bankAccount->update($data);
+        return BankAccount::create($data)->load(['bank', 'chartAccount']);
+    });
+}
 
-            return $bankAccount->fresh(['bank', 'chartAccount']);
-        });
-    }
+   public function update(BankAccount $bankAccount, array $data): BankAccount
+{
+    return DB::transaction(function () use ($bankAccount, $data) {
+        if (isset($data['bank_id'])) {
+            $this->validateBank($bankAccount->company_id, (int) $data['bank_id']);
+        }
 
+        $isCompany = array_key_exists('is_company', $data)
+            ? (bool) $data['is_company']
+            : (bool) $bankAccount->is_company;
+
+        $accountId = array_key_exists('account_id', $data)
+            ? $data['account_id']
+            : $bankAccount->account_id;
+
+        if ($isCompany) {
+            $this->validateCompanyAccount($bankAccount->company_id, $accountId);
+        } else {
+            $data['account_id'] = null;
+        }
+
+        $bankAccount->update($data);
+
+        return $bankAccount->fresh(['bank', 'chartAccount']);
+    });
+}
     public function delete(BankAccount $bankAccount): void
     {
         $bankAccount->delete();
@@ -61,4 +83,27 @@ class BankAccountService
             throw new InvalidArgumentException('Invalid bank selected.');
         }
     }
+    private function validateCompanyAccount(int $companyId, ?int $accountId): void
+{
+    if (! $accountId) {
+        throw new InvalidArgumentException(
+            'Company account is required when Is Company is enabled.'
+        );
+    }
+
+    $account = ChartOfAccount::query()
+        ->where('company_id', $companyId)
+        ->where('id', $accountId)
+        ->where('account_type', 'bank')
+        ->where('account_level', 'child')
+        ->where('is_active', true)
+        ->whereNull('deleted_at')
+        ->first();
+
+    if (! $account) {
+        throw new InvalidArgumentException(
+            'Company account must be an active child bank account.'
+        );
+    }
+}
 }

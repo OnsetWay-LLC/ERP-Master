@@ -18,6 +18,7 @@ class BankAccount extends Model
     'branch_code',
     'bank_account_no',
     'swift_code_bic',
+     'is_company',
     'account_id',
     'created_by',
 ];

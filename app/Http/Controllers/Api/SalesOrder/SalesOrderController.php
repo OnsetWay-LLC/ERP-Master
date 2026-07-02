@@ -25,15 +25,19 @@ class SalesOrderController extends Controller
         ]);
     }
 
-    public function store(StoreSalesOrderRequest $request): JsonResponse
-    {
-        $order = $this->service->create($request->validated());
+   public function store(StoreSalesOrderRequest $request): JsonResponse
+{
+    $order = $this->service->create($request->validated());
 
-        return response()->json([
-            'message' => 'Sales order created successfully.',
-            'data' => new SalesOrderResource($order),
-        ], 201);
-    }
+    $order->load('pendingDiscountApproval');
+
+    return response()->json([
+        'message' => $order->pendingDiscountApproval
+            ? 'Sales order created as draft. Discount approval request has been sent to Department Manager.'
+            : 'Sales order created successfully.',
+        'data' => new SalesOrderResource($order),
+    ], 201);
+}
 
     public function show(SalesOrder $salesOrder): JsonResponse
     {
@@ -44,15 +48,19 @@ class SalesOrderController extends Controller
         ]);
     }
 
-    public function update(UpdateSalesOrderRequest $request, SalesOrder $salesOrder): JsonResponse
-    {
-        $order = $this->service->update($salesOrder, $request->validated());
+   public function update(UpdateSalesOrderRequest $request, SalesOrder $salesOrder): JsonResponse
+{
+    $order = $this->service->update($salesOrder, $request->validated());
 
-        return response()->json([
-            'message' => 'Sales order updated successfully.',
-            'data' => new SalesOrderResource($order),
-        ]);
-    }
+    $order->load('pendingDiscountApproval');
+
+    return response()->json([
+        'message' => $order->pendingDiscountApproval
+            ? 'Sales order updated. Discount approval request has been sent to Department Manager.'
+            : 'Sales order updated successfully.',
+        'data' => new SalesOrderResource($order),
+    ]);
+}
 
     public function destroy(SalesOrder $salesOrder): JsonResponse
     {

@@ -36,8 +36,7 @@ class StoreAssetRepairRequest extends FormRequest
             'error_description' => ['nullable', 'string'],
             'actions_performed' => ['nullable', 'string'],
 
-            'items' => ['nullable', 'array'],
-
+           
             'items.*.purchase_invoice_id' => [
                 'required_with:items',
                 'integer',
@@ -47,11 +46,7 @@ class StoreAssetRepairRequest extends FormRequest
                     ->where('status', 'submitted'),
             ],
 
-            'items.*.repair_cost' => [
-                'required_with:items',
-                'numeric',
-                'min:0.01',
-            ],
+          
         ];
     }
 }

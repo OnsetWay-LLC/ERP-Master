@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\AssetCategory;
 
+use App\Constants\AccountTypes;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -78,14 +79,50 @@ class StoreAssetCategoryRequest extends FormRequest
                 'max:100',
             ],
 
-            'fixed_asset_account_id' => ['required', 'integer', 'exists:chart_of_accounts,id'],
-            'accumulated_depreciation_account_id' => ['required', 'integer', 'exists:chart_of_accounts,id'],
-            'depreciation_expense_account_id' => ['required', 'integer', 'exists:chart_of_accounts,id'],
-'capital_work_in_progress_account_id' => [
-    'nullable',
-    'integer',
-    'exists:chart_of_accounts,id',
-],
+            'fixed_asset_account_id' => [
+                'required',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::FIXED_ASSET)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'accumulated_depreciation_account_id' => [
+                'required',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::ACCUMULATED_DEPRECIATION)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'depreciation_expense_account_id' => [
+                'required',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::DEPRECIATION)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'capital_work_in_progress_account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::CAPITAL_WORK_IN_PROGRESS)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
             'is_active' => ['nullable', 'boolean'],
         ];
     }

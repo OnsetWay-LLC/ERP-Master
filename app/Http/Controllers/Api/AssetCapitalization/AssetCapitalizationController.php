@@ -54,20 +54,31 @@ class AssetCapitalizationController extends Controller
         }
     }
 
-    public function show(AssetCapitalization $assetCapitalization): JsonResponse
-    {
-        if ((int) $assetCapitalization->company_id !== $this->companyId()) {
-            abort(404);
-        }
-
-        return response()->json([
-            'status' => true,
-            'data' => new AssetCapitalizationResource(
-                $assetCapitalization->load(['targetAsset', 'items.asset'])
-            ),
-        ]);
+   public function show(AssetCapitalization $assetCapitalization): JsonResponse
+{
+    if ((int) $assetCapitalization->company_id !== $this->companyId()) {
+        abort(404);
     }
 
+    return response()->json([
+        'status' => true,
+        'data' => [
+            'id' => $assetCapitalization->id,
+            'company_id' => $assetCapitalization->company_id,
+            'series' => $assetCapitalization->series,
+            'target_asset_id' => $assetCapitalization->target_asset_id,
+            'posting_date' => $assetCapitalization->posting_date,
+            'posting_time' => $assetCapitalization->posting_time,
+            'consumed_asset_total_value' => (float) $assetCapitalization->consumed_asset_total_value,
+            'status' => $assetCapitalization->status,
+            'submitted_at' => $assetCapitalization->submitted_at,
+            'submitted_by' => $assetCapitalization->submitted_by,
+            'created_by' => $assetCapitalization->created_by,
+            'created_at' => $assetCapitalization->created_at,
+            'updated_at' => $assetCapitalization->updated_at,
+        ],
+    ]);
+}
     public function update(
         UpdateAssetCapitalizationRequest $request,
         AssetCapitalization $assetCapitalization

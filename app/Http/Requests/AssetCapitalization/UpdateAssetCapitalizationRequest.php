@@ -19,7 +19,7 @@ class UpdateAssetCapitalizationRequest extends FormRequest
         return [
             'target_asset_id' => [
     'sometimes',
-    'required',
+    'nullable',
     'integer',
     Rule::exists('assets', 'id')
         ->where('company_id', $companyId)

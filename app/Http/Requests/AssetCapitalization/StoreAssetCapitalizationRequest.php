@@ -23,7 +23,7 @@ class StoreAssetCapitalizationRequest extends FormRequest
     Rule::exists('assets', 'id')
         ->where('company_id', $companyId)
         ->where('asset_type', 'composite_asset')
-        ->where('status', 'submitted')
+        ->where('status', 'draft')
         ->whereNull('deleted_at'),
 ],
 

@@ -21,7 +21,7 @@ class StoreSalesReturnRequest extends FormRequest
             'payment_due_date' => ['nullable', 'date'],
             'return_reason' => ['nullable', 'string'],
 
-            'posting_method' => ['required', 'in:default,manual'],
+            'posting_method' => ['nullable', 'in:default,manual'],
 
             'sales_account_id' => [
                 'required_if:posting_method,manual',

@@ -50,6 +50,7 @@ if (! empty($data['capital_work_in_progress_account_id'])) {
         $data['capital_work_in_progress_account_id'],
         'capital_work_in_progress'
     );
+   
 }
             $data['company_id'] = $companyId;
             $data['created_by'] = $createdBy;
@@ -82,6 +83,14 @@ if (! empty($data['capital_work_in_progress_account_id'])) {
             if (isset($data['depreciation_expense_account_id'])) {
                 $this->validateAccount($category->company_id, $data['depreciation_expense_account_id'], 'depreciation');
             }
+
+            if (isset($data['capital_work_in_progress_account_id']) && ! empty($data['capital_work_in_progress_account_id'])) {
+    $this->validateAccount(
+        $category->company_id,
+        $data['capital_work_in_progress_account_id'],
+        'capital_work_in_progress'
+    );
+}
 
             $method = $data['depreciation_method'] ?? $category->depreciation_method;
 
@@ -117,20 +126,22 @@ if (! empty($data['capital_work_in_progress_account_id'])) {
     }
 
     private function validateAccount(int $companyId, int $accountId, string $type): void
-    {
-        $account = ChartOfAccount::query()
-            ->where('company_id', $companyId)
-            ->where('id', $accountId)
-            ->where('account_type', $type)
-            ->where('account_level', 'child')
-            ->where('is_active', true)
-            ->first();
+{
+    $account = ChartOfAccount::query()
+        ->where('company_id', $companyId)
+        ->where('id', $accountId)
+        ->where('account_type', $type)
+        ->where('account_level', 'child')
+        ->where('is_active', true)
+        ->when($type === 'depreciation', function ($q) {
+            $q->whereIn('root_category', ['expenses', 'income']);
+        })
+        ->first();
 
-        if (! $account) {
-            throw new InvalidArgumentException("Invalid {$type} account selected.");
-        }
+    if (! $account) {
+        throw new InvalidArgumentException("Invalid {$type} account selected.");
     }
-
+}
     private function validateDepreciationSettings(array $data): void
     {
         $method = $data['depreciation_method'] ?? null;

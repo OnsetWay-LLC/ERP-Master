@@ -13,7 +13,6 @@ class NotificationController extends Controller
     {
         $notifications = $request->user('api')
             ->notifications()
-            ->latest()
             ->get();
 
         return response()->json([
@@ -26,7 +25,6 @@ class NotificationController extends Controller
     {
         $notifications = $request->user('api')
             ->unreadNotifications()
-            ->latest()
             ->get();
 
         return response()->json([

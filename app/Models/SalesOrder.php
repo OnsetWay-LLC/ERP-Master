@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\DiscountApprovalRequest;
 
 class SalesOrder extends Model
 {
@@ -66,5 +67,34 @@ public function deliveryNotes()
 public function salesPerson()
 {
     return $this->belongsTo(SalesPerson::class);
+}
+public function discountApprovalRequests()
+{
+    return $this->hasMany(DiscountApprovalRequest::class);
+}
+
+public function pendingDiscountApproval()
+{
+    return $this->hasOne(DiscountApprovalRequest::class)
+        ->whereIn('status', [
+            'pending_department_manager_approval',
+            'pending_department_manager_decision',
+            'pending_cfo_approval',
+        ])
+        ->latestOfMany();
+}
+
+public function rejectedDiscountApproval()
+{
+    return $this->hasOne(DiscountApprovalRequest::class)
+        ->where('status', 'rejected')
+        ->latestOfMany();
+}
+
+public function approvedDiscountApproval()
+{
+    return $this->hasOne(DiscountApprovalRequest::class)
+        ->where('status', 'approved')
+        ->latestOfMany();
 }
 }

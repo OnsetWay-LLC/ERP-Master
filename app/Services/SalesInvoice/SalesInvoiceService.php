@@ -35,7 +35,21 @@ class SalesInvoiceService
     return DB::transaction(function () use ($data) {
         $company = Company::query()->firstOrFail();
 
-        $discountDecision = $this->handleDiscountDecision($company->id, $data);
+        $discountComesFromPreviousDocument =
+            ! empty($data['sales_order_id']) ||
+            ! empty($data['delivery_note_id']);
+
+        if ($discountComesFromPreviousDocument) {
+            $discountDecision = [
+                'requires_approval' => false,
+                'applied_discount_percentage' => (float) ($data['discount_percentage'] ?? 0),
+                'requested_discount_percentage' => (float) ($data['discount_percentage'] ?? 0),
+                'allowed_discount_percentage' => 0,
+            ];
+        } else {
+            $discountDecision = $this->handleDiscountDecision($company->id, $data);
+        }
+
         $data['discount_percentage'] = $discountDecision['applied_discount_percentage'];
 
         $totals = $this->calculateTotals($company->id, $data);
@@ -55,14 +69,13 @@ class SalesInvoiceService
 
             'posting_method' => $data['posting_method'],
 
-            // الفاتورة دائما Credit
             'payment_mode' => 'credit',
             'payment_account_id' => null,
             'paid_amount' => 0,
             'outstanding_amount' => $totals['grand_total'],
             'payment_status' => 'unpaid',
 
-            'discount_percentage' => $data['discount_percentage'] ?? 0,
+            'discount_percentage' => $data['discount_percentage'],
             'net_total' => $totals['net_total'],
             'tax_total' => $totals['tax_total'],
             'fees_total' => $totals['fees_total'],
@@ -97,7 +110,7 @@ class SalesInvoiceService
         ]);
     });
 }
-  public function update(SalesInvoice $salesInvoice, array $data): SalesInvoice
+ public function update(SalesInvoice $salesInvoice, array $data): SalesInvoice
 {
     if ($salesInvoice->status !== 'draft') {
         throw new RuntimeException('Only draft invoices can be updated.');
@@ -113,7 +126,29 @@ class SalesInvoiceService
                 'update'
             );
 
-        $discountDecision = $this->handleDiscountDecision($companyId, $data);
+        $discountComesFromPreviousDocument =
+            ! empty($data['sales_order_id']) ||
+            ! empty($data['delivery_note_id']) ||
+            ! empty($salesInvoice->sales_order_id) ||
+            ! empty($salesInvoice->delivery_note_id);
+
+        if ($discountComesFromPreviousDocument) {
+            $inheritedDiscount = (float) (
+                $data['discount_percentage']
+                ?? $salesInvoice->discount_percentage
+                ?? 0
+            );
+
+            $discountDecision = [
+                'requires_approval' => false,
+                'applied_discount_percentage' => $inheritedDiscount,
+                'requested_discount_percentage' => $inheritedDiscount,
+                'allowed_discount_percentage' => 0,
+            ];
+        } else {
+            $discountDecision = $this->handleDiscountDecision($companyId, $data);
+        }
+
         $data['discount_percentage'] = $discountDecision['applied_discount_percentage'];
 
         $totals = $this->calculateTotals($companyId, $data);
@@ -131,15 +166,13 @@ class SalesInvoiceService
 
             'posting_method' => $data['posting_method'],
 
-            // الفاتورة دائمًا Credit
-            // الدفع الحقيقي يتم لاحقًا من Sales Payment
             'payment_mode' => 'credit',
             'payment_account_id' => null,
             'paid_amount' => 0,
             'outstanding_amount' => $totals['grand_total'],
             'payment_status' => 'unpaid',
 
-            'discount_percentage' => $data['discount_percentage'] ?? 0,
+            'discount_percentage' => $data['discount_percentage'],
             'discount_amount' => $totals['discount_amount'],
             'net_total' => $totals['net_total'],
             'tax_total' => $totals['tax_total'],
@@ -154,20 +187,8 @@ class SalesInvoiceService
         $salesInvoice->fees()->delete();
 
         $this->saveInvoiceItems($salesInvoice, $companyId, $data['items']);
-
-        $this->saveInvoiceTaxes(
-            $salesInvoice,
-            $companyId,
-            $data['tax_template_ids'] ?? [],
-            $totals['net_total']
-        );
-
-        $this->saveInvoiceFees(
-            $salesInvoice,
-            $companyId,
-            $data['fees_template_ids'] ?? [],
-            $totals['net_total']
-        );
+        $this->saveInvoiceTaxes($salesInvoice, $companyId, $data['tax_template_ids'] ?? [], $totals['net_total']);
+        $this->saveInvoiceFees($salesInvoice, $companyId, $data['fees_template_ids'] ?? [], $totals['net_total']);
 
         if ($discountDecision['requires_approval']) {
             $this->createDiscountApprovalRequest(
@@ -188,106 +209,129 @@ class SalesInvoiceService
     });
 }
     public function submit(SalesInvoice $salesInvoice): SalesInvoice
-    {
-        if ($salesInvoice->status !== 'draft') {
-            throw new RuntimeException('Only draft invoices can be submitted.');
-        }
-
-        if ($salesInvoice->pendingDiscountApproval()->exists()) {
-            throw new RuntimeException('Cannot submit invoice while discount approval is pending.');
-        }
-app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $salesInvoice->company_id,
-        $salesInvoice->posting_date,
-        'create'
-    );
-        return DB::transaction(function () use ($salesInvoice) {
-            $salesInvoice->load([
-                'items.item',
-                'taxes',
-                'fees',
-                'salesPerson',
-                'deliveryNote',
-                'salesOrder',
-            ]);
-
-            $shouldAffectStock =
-                ! $salesInvoice->delivery_note_id
-                && ! $salesInvoice->is_asset_sale;
-
-            if ($shouldAffectStock) {
-                foreach ($salesInvoice->items as $item) {
-                    $stock = WarehouseStock::query()
-                        ->where('company_id', $salesInvoice->company_id)
-                        ->where('item_id', $item->item_id)
-                        ->where('warehouse_id', $item->warehouse_id)
-                        ->lockForUpdate()
-                        ->first();
-
-                    if (! $stock || (float) $stock->quantity < (float) $item->quantity) {
-                        throw new RuntimeException("Insufficient stock for item: {$item->item_name_en}.");
-                    }
-
-                    $averageRate = (float) $stock->average_rate;
-                    $outgoingValue = (float) $item->quantity * $averageRate;
-
-                    $newQty = (float) $stock->quantity - (float) $item->quantity;
-                    $newValue = (float) $stock->stock_value - $outgoingValue;
-
-                    $stock->update([
-                        'quantity' => $newQty,
-                        'stock_value' => max($newValue, 0),
-                        'average_rate' => $newQty > 0 ? $averageRate : 0,
-                    ]);
-                }
-
-                $this->createStockMovementEntry($salesInvoice);
-            }
-
-            $this->postJournalEntry($salesInvoice);
-
-            $paidAmount = (float) ($salesInvoice->paid_amount ?? 0);
-            $creditNoteAmount = (float) ($salesInvoice->credit_note_amount ?? 0);
-
-            $outstandingAmount =
-                (float) $salesInvoice->grand_total
-                - $paidAmount
-                - $creditNoteAmount;
-
-            $salesInvoice->update([
-                'status' => 'submitted',
-                'paid_amount' => $paidAmount,
-                'credit_note_amount' => $creditNoteAmount,
-                'outstanding_amount' => max($outstandingAmount, 0),
-                'payment_status' => $outstandingAmount <= 0 ? 'paid' : 'unpaid',
-            ]);
-
-            if ($salesInvoice->deliveryNote) {
-                $salesInvoice->deliveryNote->update([
-                    'status' => 'completed',
-                ]);
-            }
-
-            if ($salesInvoice->salesOrder) {
-                $salesInvoice->salesOrder->update([
-                    'status' => 'completed',
-                    'sales_person_id' => $salesInvoice->sales_person_id,
-                ]);
-            }
-
-            return $salesInvoice->fresh()->load([
-                'customer',
-                'salesPerson',
-                'salesOrder',
-                'deliveryNote',
-                'items',
-                'taxes',
-                'fees',
-            ]);
-        });
+{
+    if ($salesInvoice->status !== 'draft') {
+        throw new RuntimeException('Only draft invoices can be submitted.');
     }
 
+    $pendingApproval = DiscountApprovalRequest::query()
+        ->where('sales_invoice_id', $salesInvoice->id)
+        ->whereIn('status', [
+            'pending_department_manager_approval',
+            'pending_department_manager_decision',
+            'pending_cfo_approval',
+        ])
+        ->exists();
+
+    if ($pendingApproval) {
+        throw new RuntimeException(
+            'Cannot submit invoice while discount approval is pending.'
+        );
+    }
+
+    $rejectedApproval = DiscountApprovalRequest::query()
+        ->where('sales_invoice_id', $salesInvoice->id)
+        ->where('status', 'rejected')
+        ->exists();
+
+    if ($rejectedApproval) {
+        throw new RuntimeException(
+            'Cannot submit invoice because discount approval was rejected.'
+        );
+    }
+
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $salesInvoice->company_id,
+            $salesInvoice->posting_date,
+            'create'
+        );
+
+    return DB::transaction(function () use ($salesInvoice) {
+        $salesInvoice->load([
+            'items.item',
+            'taxes',
+            'fees',
+            'salesPerson',
+            'deliveryNote',
+            'salesOrder',
+        ]);
+
+        $shouldAffectStock =
+            ! $salesInvoice->delivery_note_id
+            && ! $salesInvoice->is_asset_sale;
+
+        if ($shouldAffectStock) {
+            foreach ($salesInvoice->items as $item) {
+                $stock = WarehouseStock::query()
+                    ->where('company_id', $salesInvoice->company_id)
+                    ->where('item_id', $item->item_id)
+                    ->where('warehouse_id', $item->warehouse_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $stock || (float) $stock->quantity < (float) $item->quantity) {
+                    throw new RuntimeException("Insufficient stock for item: {$item->item_name_en}.");
+                }
+
+                $averageRate = (float) $stock->average_rate;
+                $outgoingValue = (float) $item->quantity * $averageRate;
+
+                $newQty = (float) $stock->quantity - (float) $item->quantity;
+                $newValue = (float) $stock->stock_value - $outgoingValue;
+
+                $stock->update([
+                    'quantity' => $newQty,
+                    'stock_value' => max($newValue, 0),
+                    'average_rate' => $newQty > 0 ? $averageRate : 0,
+                ]);
+            }
+
+            $this->createStockMovementEntry($salesInvoice);
+        }
+
+        $this->postJournalEntry($salesInvoice);
+
+        $paidAmount = (float) ($salesInvoice->paid_amount ?? 0);
+        $creditNoteAmount = (float) ($salesInvoice->credit_note_amount ?? 0);
+
+        $outstandingAmount =
+            (float) $salesInvoice->grand_total
+            - $paidAmount
+            - $creditNoteAmount;
+
+        $salesInvoice->update([
+            'status' => 'submitted',
+            'paid_amount' => $paidAmount,
+            'credit_note_amount' => $creditNoteAmount,
+            'outstanding_amount' => max($outstandingAmount, 0),
+            'payment_status' => $outstandingAmount <= 0 ? 'paid' : 'unpaid',
+        ]);
+
+        if ($salesInvoice->deliveryNote) {
+            $salesInvoice->deliveryNote->update([
+                'status' => 'completed',
+            ]);
+        }
+
+        if ($salesInvoice->salesOrder) {
+            $salesInvoice->salesOrder->update([
+                'status' => 'completed',
+                'sales_person_id' => $salesInvoice->sales_person_id,
+            ]);
+        }
+
+        return $salesInvoice->fresh()->load([
+            'customer',
+            'salesPerson',
+            'salesOrder',
+            'deliveryNote',
+            'items',
+            'taxes',
+            'fees',
+        ]);
+    });
+}
   private function postJournalEntry(SalesInvoice $invoice): void
 {
     app(\App\Services\FinancialYear\FinancialYearService::class)
@@ -412,42 +456,92 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
     ]);
 }
 
-    public function applyApprovedDiscount(SalesInvoice $invoice, float $discountPercentage): SalesInvoice
-    {
-        if ($invoice->status !== 'draft') {
-            throw new RuntimeException('Discount can only be applied to draft invoices.');
-        }
-
-        return DB::transaction(function () use ($invoice, $discountPercentage) {
-            $invoice->load(['customer', 'salesPerson', 'salesOrder', 'deliveryNote', 'items', 'taxes', 'fees']);
-
-            $data = [
-                'discount_percentage' => $discountPercentage,
-                'items' => $invoice->items->map(fn ($item) => [
-                    'sales_order_item_id' => $item->sales_order_item_id,
-                    'delivery_note_item_id' => $item->delivery_note_item_id,
-                    'item_id' => $item->item_id,
-                    'warehouse_id' => $item->warehouse_id,
-                    'quantity' => $item->quantity,
-                    'rate' => $item->rate,
-                ])->toArray(),
-                'tax_template_ids' => $invoice->taxes->pluck('tax_template_id')->unique()->values()->toArray(),
-                'fees_template_ids' => $invoice->fees->pluck('fees_template_id')->unique()->values()->toArray(),
-            ];
-
-            $totals = $this->calculateTotals($invoice->company_id, $data);
-
-            $invoice->update([
-                'discount_percentage' => $discountPercentage,
-                'discount_amount' => $totals['discount_amount'],
-                'grand_total' => $totals['grand_total'],
-            ]);
-
-            return $invoice->fresh(['customer', 'salesPerson', 'salesOrder', 'deliveryNote', 'items', 'taxes', 'fees']);
-        });
+    public function applyApprovedDiscount(
+    SalesInvoice $invoice,
+    float $discountPercentage
+): SalesInvoice {
+    if ($invoice->status !== 'draft') {
+        throw new RuntimeException('Discount can only be applied to draft invoices.');
     }
 
-  public function createFromDeliveryNote(DeliveryNote $deliveryNote): SalesInvoice
+    return DB::transaction(function () use ($invoice, $discountPercentage) {
+        $invoice->load([
+            'customer',
+            'salesPerson',
+            'salesOrder',
+            'deliveryNote',
+            'items',
+            'taxes',
+            'fees',
+        ]);
+
+        $data = [
+            'discount_percentage' => $discountPercentage,
+
+            'items' => $invoice->items->map(fn ($item) => [
+                'sales_order_item_id' => $item->sales_order_item_id,
+                'delivery_note_item_id' => $item->delivery_note_item_id,
+                'item_id' => $item->item_id,
+                'warehouse_id' => $item->warehouse_id,
+                'quantity' => $item->quantity,
+                'rate' => $item->rate,
+            ])->toArray(),
+
+            'tax_template_ids' => $invoice->taxes
+                ->pluck('tax_template_id')
+                ->unique()
+                ->values()
+                ->toArray(),
+
+            'fees_template_ids' => $invoice->fees
+                ->pluck('fees_template_id')
+                ->unique()
+                ->values()
+                ->toArray(),
+        ];
+
+        $totals = $this->calculateTotals($invoice->company_id, $data);
+
+        $invoice->update([
+            'discount_percentage' => $discountPercentage,
+            'discount_amount' => $totals['discount_amount'],
+            'net_total' => $totals['net_total'],
+            'tax_total' => $totals['tax_total'],
+            'fees_total' => $totals['fees_total'],
+            'grand_total' => $totals['grand_total'],
+            'outstanding_amount' => $totals['grand_total'],
+        ]);
+
+        $invoice->taxes()->delete();
+        $invoice->fees()->delete();
+
+        $this->saveInvoiceTaxes(
+            $invoice,
+            $invoice->company_id,
+            $data['tax_template_ids'],
+            $totals['net_total']
+        );
+
+        $this->saveInvoiceFees(
+            $invoice,
+            $invoice->company_id,
+            $data['fees_template_ids'],
+            $totals['net_total']
+        );
+
+        return $invoice->fresh([
+            'customer',
+            'salesPerson',
+            'salesOrder',
+            'deliveryNote',
+            'items',
+            'taxes',
+            'fees',
+        ]);
+    });
+}
+
+ public function createFromDeliveryNote(DeliveryNote $deliveryNote): SalesInvoice
 {
     return DB::transaction(function () use ($deliveryNote) {
         if ($deliveryNote->status !== 'to_bill') {
@@ -458,7 +552,13 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
             throw new RuntimeException('Sales invoice already exists for this delivery note.');
         }
 
-        $deliveryNote->load(['salesOrder', 'customer', 'items.item', 'taxes', 'fees']);
+        $deliveryNote->load([
+            'salesOrder',
+            'customer',
+            'items.item',
+            'taxes',
+            'fees',
+        ]);
 
         return $this->create([
             'sales_order_id' => $deliveryNote->sales_order_id,
@@ -472,11 +572,10 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
 
             'posting_method' => request('posting_method', 'default'),
 
-            // ممنوع الدفع من الفاتورة
             'payment_mode' => 'credit',
             'payment_account_id' => null,
 
-            'discount_percentage' => $deliveryNote->discount_percentage,
+            'discount_percentage' => (float) $deliveryNote->discount_percentage,
             'is_asset_sale' => false,
 
             'items' => $deliveryNote->items->map(fn ($item) => [
@@ -500,7 +599,6 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         ]);
     });
 }
-
     public function delete(SalesInvoice $salesInvoice): void
     {
         if ($salesInvoice->status !== 'draft') {
@@ -560,53 +658,81 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         ];
     }
 
-    private function getAllowedDiscountForUser(User $user, DiscountSetting $settings): float
-    {
-        if ($user->hasRole('Sub Accountant')) {
-            return (float) $settings->sub_accountant_max_discount;
-        }
-
-        if ($user->hasRole('Department Manager')) {
-            return (float) $settings->department_manager_max_discount;
-        }
-
-        if ($user->hasRole('CFO') || $user->hasRole('Chief Accountant')) {
-            return 100;
-        }
-
-        return 0;
+  private function getAllowedDiscountForUser($user, DiscountSetting $settings): float
+{
+    if ($user->hasRole('Accountant Sub') || $user->hasRole('Sub Accountant')) {
+        return (float) $settings->sub_accountant_max_discount;
     }
 
-    private function createDiscountApprovalRequest(SalesInvoice $invoice, float $requestedDiscount, float $allowedDiscount): void
-    {
-        $approvalRequest = DiscountApprovalRequest::query()
-            ->where('sales_invoice_id', $invoice->id)
-            ->where('status', 'pending')
-            ->first();
-
-        if ($approvalRequest) {
-            $approvalRequest->update([
-                'requested_discount_percentage' => $requestedDiscount,
-                'allowed_discount_percentage' => $allowedDiscount,
-            ]);
-
-            $approvalRequest = $approvalRequest->fresh(['invoice', 'requester']);
-        } else {
-            $approvalRequest = DiscountApprovalRequest::query()->create([
-                'company_id' => $invoice->company_id,
-                'sales_invoice_id' => $invoice->id,
-                'requested_by' => auth('api')->id(),
-                'requested_discount_percentage' => $requestedDiscount,
-                'allowed_discount_percentage' => $allowedDiscount,
-                'status' => 'pending',
-            ])->load(['invoice', 'requester']);
-        }
-
-        foreach (User::role('CFO')->get() as $cfo) {
-            $cfo->notify(new DiscountApprovalRequestedNotification($approvalRequest));
-        }
+    if ($user->hasRole('Accountant Chief') || $user->hasRole('Department Manager')) {
+        return (float) $settings->department_manager_max_discount;
     }
 
+    if ($user->hasRole('CFO')) {
+        return 100;
+    }
+
+    return 0;
+}    private function createDiscountApprovalRequest(
+    SalesInvoice $invoice,
+    float $requestedDiscount,
+    float $allowedDiscount
+): void {
+    $settings = DiscountSetting::query()
+        ->where('company_id', $invoice->company_id)
+        ->firstOrFail();
+
+    $approvalLevel = $requestedDiscount <= (float) $settings->department_manager_max_discount
+        ? 'department_manager'
+        : 'cfo';
+
+    $status = $approvalLevel === 'department_manager'
+        ? 'pending_department_manager_approval'
+        : 'pending_department_manager_decision';
+
+    $approvalRequest = DiscountApprovalRequest::query()
+        ->where('sales_invoice_id', $invoice->id)
+        ->whereIn('status', [
+            'pending_department_manager_approval',
+            'pending_department_manager_decision',
+            'pending_cfo_approval',
+        ])
+        ->first();
+
+    if ($approvalRequest) {
+        $approvalRequest->update([
+            'sales_order_id' => null,
+            'requested_discount_percentage' => $requestedDiscount,
+            'allowed_discount_percentage' => $allowedDiscount,
+            'approval_level' => $approvalLevel,
+            'status' => $status,
+            'rejection_reason' => null,
+            'approved_by' => null,
+            'responded_at' => null,
+            'forwarded_by' => null,
+            'forwarded_at' => null,
+        ]);
+
+        $approvalRequest = $approvalRequest->fresh(['invoice', 'requester']);
+    } else {
+        $approvalRequest = DiscountApprovalRequest::query()->create([
+            'company_id' => $invoice->company_id,
+            'sales_order_id' => null,
+            'sales_invoice_id' => $invoice->id,
+            'requested_by' => auth('api')->id(),
+            'requested_discount_percentage' => $requestedDiscount,
+            'allowed_discount_percentage' => $allowedDiscount,
+            'approval_level' => $approvalLevel,
+            'status' => $status,
+        ])->load(['invoice', 'requester']);
+    }
+
+    foreach (User::role('Accountant Chief')->get() as $manager) {
+        $manager->notify(
+            new DiscountApprovalRequestedNotification($approvalRequest)
+        );
+    }
+}
  private function resolvePostingAccounts(int $companyId, array $data): array
 {
     if (($data['posting_method'] ?? 'default') === 'manual') {
@@ -656,100 +782,95 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
     $itemTotal = 0;
 
     foreach ($data['items'] as $row) {
-
         $item = Item::query()->findOrFail($row['item_id']);
 
-        $rate = $row['rate']
-            ?? $item->selling_price
-            ?? $item->sale_price
-            ?? $item->standard_rate
-            ?? 0;
+        $rate = $this->resolveItemRate($row, $item);
 
-        if ($rate <= 0) {
-            throw new RuntimeException(
-                "Selling price is not configured for item: {$item->name_en}."
-            );
-        }
+        $qty = (float) $row['quantity'];
 
-        $itemTotal += (float)$row['quantity'] * (float)$rate;
+        $itemTotal += $qty * $rate;
     }
 
-    $discountPercentage = (float)($data['discount_percentage'] ?? 0);
+    $itemTotal = round($itemTotal, 2);
 
-    $discountAmount = round(
-        $itemTotal * ($discountPercentage / 100),
-        2
-    );
+    $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
 
-    $netTotal = round(
-        $itemTotal - $discountAmount,
-        2
-    );
+    $discountAmount = round($itemTotal * ($discountPercentage / 100), 2);
+
+    $netTotal = round($itemTotal - $discountAmount, 2);
 
     $taxTotal = 0;
 
-    if (!empty($data['tax_template_ids'])) {
-
+    if (! empty($data['tax_template_ids'])) {
         $templates = TaxTemplate::with('lines')
             ->where('company_id', $companyId)
             ->whereIn('id', $data['tax_template_ids'])
             ->get();
 
         foreach ($templates as $template) {
-
             foreach ($template->lines as $line) {
-
                 $taxTotal += $line->type === 'on_net_total'
-                    ? $netTotal * ((float)$line->tax_rate / 100)
-                    : (float)($line->amount ?? 0);
+                    ? $netTotal * ((float) $line->tax_rate / 100)
+                    : (float) ($line->amount ?? 0);
             }
         }
     }
 
+    $taxTotal = round($taxTotal, 2);
+
     $feesTotal = 0;
 
-    if (!empty($data['fees_template_ids'])) {
-
+    if (! empty($data['fees_template_ids'])) {
         $templates = FeesTemplate::query()
             ->where('company_id', $companyId)
             ->whereIn('id', $data['fees_template_ids'])
             ->get();
 
         foreach ($templates as $template) {
-
             $feesTotal += $template->type === 'percentage'
-                ? $netTotal * ((float)$template->fees_rate / 100)
-                : (float)($template->amount ?? 0);
+                ? $netTotal * ((float) $template->fees_rate / 100)
+                : (float) ($template->amount ?? 0);
         }
     }
 
-    $grandTotal = round(
-        $netTotal + $taxTotal + $feesTotal,
-        2
-    );
+    $feesTotal = round($feesTotal, 2);
+
+    $grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
 
     return [
-        'item_total' => round($itemTotal, 2),
+        'item_total' => $itemTotal,
         'net_total' => $netTotal,
-        'tax_total' => round($taxTotal, 2),
-        'fees_total' => round($feesTotal, 2),
+        'tax_total' => $taxTotal,
+        'fees_total' => $feesTotal,
         'discount_percentage' => $discountPercentage,
         'discount_amount' => $discountAmount,
         'grand_total' => $grandTotal,
     ];
 }
+private function resolveItemRate(array $row, Item $item): float
+{
+    $rate = $row['rate']
+        ?? $item->selling_price
+        ?? $item->sale_price
+        ?? $item->standard_rate
+        ?? 0;
 
+    $rate = (float) $rate;
+
+    if ($rate <= 0) {
+        throw new RuntimeException(
+            "Selling price is not configured for item: {$item->name_en}."
+        );
+    }
+
+    return $rate;
+}
     private function saveInvoiceItems(SalesInvoice $invoice, int $companyId, array $items): void
     {
         foreach ($items as $row) {
             $item = Item::query()->findOrFail($row['item_id']);
 
-            $rate = $row['rate']
-                ?? $item->selling_price
-                ?? $item->sale_price
-                ?? $item->standard_rate
-                ?? 0;
-
+          $rate = $this->resolveItemRate($row, $item);
             if ($rate <= 0) {
                 throw new RuntimeException("Selling price is not configured for item: {$item->name_en}.");
             }

@@ -6,23 +6,32 @@ use Illuminate\Database\Eloquent\Model;
 
 class DiscountApprovalRequest extends Model
 {
-    protected $fillable = [
-        'company_id',
-        'sales_invoice_id',
-        'requested_by',
-        'approved_by',
-        'requested_discount_percentage',
-        'allowed_discount_percentage',
-        'status',
-        'rejection_reason',
-        'responded_at',
-    ];
-
+   protected $fillable = [
+    'company_id',
+    'sales_order_id',
+    'sales_invoice_id',
+    'requested_by',
+    'approved_by',
+    'forwarded_by',
+    'requested_discount_percentage',
+    'allowed_discount_percentage',
+    'approval_level',
+    'status',
+    'rejection_reason',
+    'responded_at',
+    'forwarded_at',
+];
     protected $casts = [
         'requested_discount_percentage' => 'decimal:2',
         'allowed_discount_percentage' => 'decimal:2',
         'responded_at' => 'datetime',
+        'forwarded_at' => 'datetime',
     ];
+
+    public function salesOrder()
+    {
+        return $this->belongsTo(SalesOrder::class, 'sales_order_id');
+    }
 
     public function invoice()
     {
@@ -37,5 +46,10 @@ class DiscountApprovalRequest extends Model
     public function approver()
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function forwarder()
+    {
+        return $this->belongsTo(User::class, 'forwarded_by');
     }
 }

@@ -8,9 +8,11 @@ use App\Http\Resources\DiscountApprovalRequestResource;
 use App\Models\DiscountApprovalRequest;
 use App\Services\DiscountApproval\DiscountApprovalService;
 use Illuminate\Http\JsonResponse;
+use RuntimeException;
 
 class DiscountApprovalController extends Controller
 {
+    
     public function __construct(
         private readonly DiscountApprovalService $service
     ) {}
@@ -20,7 +22,19 @@ class DiscountApprovalController extends Controller
         $requests = $this->service->pendingRequests();
 
         return response()->json([
+            'status' => true,
             'message' => 'Pending discount approval requests retrieved successfully.',
+            'data' => DiscountApprovalRequestResource::collection($requests),
+        ]);
+    }
+
+    public function myRequests(): JsonResponse
+    {
+        $requests = $this->service->myRequests();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'My discount approval requests retrieved successfully.',
             'data' => DiscountApprovalRequestResource::collection($requests),
         ]);
     }
@@ -29,14 +43,22 @@ class DiscountApprovalController extends Controller
         RespondDiscountApprovalRequest $request,
         DiscountApprovalRequest $discountApprovalRequest
     ): JsonResponse {
-        $approval = $this->service->respond(
-            $discountApprovalRequest,
-            $request->validated()
-        );
+        try {
+            $approval = $this->service->respond(
+                $discountApprovalRequest,
+                $request->validated()
+            );
 
-        return response()->json([
-            'message' => 'Discount approval request responded successfully.',
-            'data' => new DiscountApprovalRequestResource($approval),
-        ]);
+            return response()->json([
+                'status' => true,
+                'message' => 'Discount approval request responded successfully.',
+                'data' => new DiscountApprovalRequestResource($approval),
+            ]);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 }

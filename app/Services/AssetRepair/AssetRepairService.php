@@ -4,10 +4,6 @@ namespace App\Services\AssetRepair;
 
 use App\Models\Asset;
 use App\Models\AssetRepair;
-use App\Models\ChartOfAccount;
-use App\Models\GeneralLedger;
-use App\Models\JournalEntry;
-use App\Models\JournalEntryLine;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -21,7 +17,6 @@ class AssetRepairService
         'items.purchaseInvoice',
         'items.expenseAccount',
         'items.paymentAccount',
-        'journalEntry.lines.account',
     ];
 
     public function getAll(int $companyId): Collection
@@ -33,128 +28,161 @@ class AssetRepairService
             ->get();
     }
 
-    public function create(array $data, int $companyId, ?int $createdBy = null): AssetRepair
-    {
-        app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $companyId,
-        $data['posting_date'],
-        'create'
-    );
-        return DB::transaction(function () use ($data, $companyId, $createdBy) {
-            $asset = $this->getValidAsset($companyId, (int) $data['asset_id']);
+    public function create(array $data, int $companyId, ?int $userId): AssetRepair
+{
+    return DB::transaction(function () use ($data, $companyId, $userId) {
+        $items = $this->prepareItems($companyId, $data['items'] ?? []);
+        unset($data['items']);
 
-            $repair = AssetRepair::query()->create([
-                'company_id' => $companyId,
-                'series' => $this->generateSeries($companyId),
-                'asset_id' => $asset->id,
-                'repair_status' => $data['repair_status'],
-                'failure_date' => $data['failure_date'],
-                'completed_date' => null,
-                'error_description' => $data['error_description'] ?? null,
-                'actions_performed' => $data['actions_performed'] ?? null,
-                'repair_cost_total' => 0,
-                'status' => 'draft',
-                'created_by' => $createdBy,
+        $this->getValidAsset($companyId, (int) $data['asset_id']);
+
+        $data['company_id'] = $companyId;
+        $data['created_by'] = $userId;
+        $data['series'] = $this->generateSeries($companyId);
+        $data['status'] = 'draft';
+        $data['repair_status'] = 'pending';
+        $data['repair_cost_total'] = collect($items)->sum('repair_cost');
+
+        $repair = AssetRepair::create($data);
+
+        foreach ($items as $item) {
+            $repair->items()->create($item);
+        }
+
+        return $repair->fresh($this->relations);
+    });
+}
+private function generateSeries(int $companyId): string
+{
+    $year = now()->format('Y');
+
+    $lastRepair = AssetRepair::where('company_id', $companyId)
+        ->where('series', 'like', "AR-{$year}-%")
+        ->orderByDesc('id')
+        ->lockForUpdate()
+        ->first();
+
+    $nextNumber = 1;
+
+    if ($lastRepair) {
+        $lastNumber = (int) substr($lastRepair->series, -5);
+        $nextNumber = $lastNumber + 1;
+    }
+
+    return 'AR-' . $year . '-' . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
+}
+ public function update(AssetRepair $assetRepair, array $data): AssetRepair
+{
+    if ($assetRepair->status !== 'draft') {
+        throw new InvalidArgumentException('Only draft asset repairs can be updated.');
+    }
+
+    return DB::transaction(function () use ($assetRepair, $data) {
+        $companyId = (int) $assetRepair->company_id;
+
+        $hasItems = array_key_exists('items', $data);
+        $items = $hasItems
+            ? $this->prepareItems($companyId, $data['items'] ?? [])
+            : null;
+
+        unset($data['items'], $data['status'], $data['repair_cost_total']);
+
+        if (isset($data['asset_id'])) {
+            $this->getValidAsset($companyId, (int) $data['asset_id']);
+        }
+
+        if (isset($data['repair_status']) && $data['repair_status'] !== 'completed') {
+            throw new InvalidArgumentException('Repair status can only be changed to completed.');
+        }
+
+        $assetRepair->update($data);
+
+        if ($hasItems) {
+            $assetRepair->items()->delete();
+
+            foreach ($items as $item) {
+                $assetRepair->items()->create($item);
+            }
+
+            $assetRepair->update([
+                'repair_cost_total' => collect($items)->sum('repair_cost'),
             ]);
+        }
 
-            if (! empty($data['items'])) {
-                $itemsData = $this->prepareItems($companyId, $data['items']);
+        return $assetRepair->fresh($this->relations);
+    });
 
-                foreach ($itemsData as $item) {
-                    $repair->items()->create($item);
-                }
-
-                $repair->update([
-                    'repair_cost_total' => collect($itemsData)->sum('repair_cost'),
-                ]);
-            }
-
-            return $repair->fresh($this->relations);
-        });
+}   public function submit(AssetRepair $assetRepair, ?int $userId): AssetRepair
+{
+    if ($assetRepair->status !== 'draft') {
+        throw new InvalidArgumentException('Only draft asset repairs can be submitted.');
     }
 
-    public function update(AssetRepair $repair, array $data): AssetRepair
-    {
-        
-        return DB::transaction(function () use ($repair, $data) {
-            if ($repair->status !== 'draft') {
-                throw new InvalidArgumentException('Submitted asset repair cannot be updated.');
-            }
-
-            $assetId = $data['asset_id'] ?? $repair->asset_id;
-            $asset = $this->getValidAsset($repair->company_id, (int) $assetId);
-
-            $updateData = [
-                'asset_id' => $asset->id,
-                'repair_status' => $data['repair_status'] ?? $repair->repair_status,
-                'failure_date' => $data['failure_date'] ?? $repair->failure_date?->format('Y-m-d'),
-                'error_description' => $data['error_description'] ?? $repair->error_description,
-                'actions_performed' => $data['actions_performed'] ?? $repair->actions_performed,
-                'completed_date' => null,
-            ];
-
-            if (isset($data['items'])) {
-                $itemsData = $this->prepareItems($repair->company_id, $data['items']);
-
-                $repair->items()->delete();
-
-                foreach ($itemsData as $item) {
-                    $repair->items()->create($item);
-                }
-
-                $updateData['repair_cost_total'] = collect($itemsData)->sum('repair_cost');
-            }
-
-            $repair->update($updateData);
-
-            return $repair->fresh($this->relations);
-        });
+    if ($assetRepair->repair_status !== 'completed') {
+        throw new InvalidArgumentException('Repair must be completed before submission.');
     }
 
-    public function submit(AssetRepair $repair, ?int $submittedBy = null): AssetRepair
-    {
-        return DB::transaction(function () use ($repair, $submittedBy) {
-            if ($repair->status !== 'draft') {
-                throw new InvalidArgumentException('Only draft asset repair can be submitted.');
-            }
+    return DB::transaction(function () use ($assetRepair, $userId) {
+        $assetRepair->load('items');
 
-            $repair->load($this->relations);
+        if ($assetRepair->items->isEmpty()) {
+            throw new InvalidArgumentException('Asset repair must have at least one item.');
+        }
 
-            if ($repair->repair_status === 'pending') {
-                throw new InvalidArgumentException('Pending repair status can only be saved as draft, not submitted.');
-            }
+        if ((float) $assetRepair->repair_cost_total <= 0) {
+            throw new InvalidArgumentException('Repair cost total must be greater than zero.');
+        }
 
-            if (! in_array($repair->repair_status, ['completed', 'cancelled'], true)) {
-                throw new InvalidArgumentException('Repair status must be completed or cancelled before submit.');
-            }
+        // هون خلي كود إنشاء Journal Entry الموجود عندك
+        // $journalEntry = $this->createJournalEntry($assetRepair, $userId);
 
-            if ($repair->items->isEmpty()) {
-                throw new InvalidArgumentException('Repair purchase invoice table must contain at least one row.');
-            }
+        $assetRepair->update([
+            'status' => 'submitted',
+            'repair_status' => 'completed',
+            'submitted_at' => now(),
+            'submitted_by' => $userId,
 
-            foreach ($repair->items as $item) {
-                if ((float) $item->repair_cost <= 0) {
-                    throw new InvalidArgumentException('Repair cost must be greater than zero.');
-                }
-            }
+            // إذا عندك journal entry:
+            // 'journal_entry_id' => $journalEntry->id,
+        ]);
 
-            $journalEntry = $this->createRepairJournalEntry(
-                repair: $repair,
-                userId: $submittedBy
-            );
+        return $assetRepair->fresh([
+            'asset.assetItem',
+            'asset.assetCategory',
+            'asset.location',
+            'items.purchaseInvoice',
+            'items.expenseAccount',
+            'items.paymentAccount',
+            'journalEntry.lines.account',
+        ]);
+    });
+}
 
-            $repair->update([
-                'status' => 'submitted',
-                'completed_date' => $repair->repair_status === 'completed' ? now() : null,
-                'journal_entry_id' => $journalEntry->id,
-                'submitted_at' => now(),
-                'submitted_by' => $submittedBy,
-            ]);
-
-            return $repair->fresh($this->relations);
-        });
+   public function cancel(AssetRepair $assetRepair): AssetRepair
+{
+    if ($assetRepair->status !== 'submitted') {
+        throw new InvalidArgumentException('Only submitted asset repairs can be cancelled.');
     }
+
+    return DB::transaction(function () use ($assetRepair) {
+       
+
+        $assetRepair->update([
+            'status' => 'cancelled',
+            'repair_status' => 'cancelled',
+        ]);
+
+        return $assetRepair->fresh([
+            'asset.assetItem',
+            'asset.assetCategory',
+            'asset.location',
+            'items.purchaseInvoice',
+            'items.expenseAccount',
+            'items.paymentAccount',
+            'journalEntry.lines.account',
+        ]);
+    });
+}
 
     public function delete(AssetRepair $repair): void
     {
@@ -173,15 +201,6 @@ class AssetRepairService
             ->where('status', 'submitted')
             ->with(['assetItem', 'assetCategory', 'location'])
             ->latest('id')
-            ->get();
-    }
-
-    public function availablePurchaseInvoices(int $companyId): Collection
-    {
-        return DB::table('purchase_invoices')
-            ->where('company_id', $companyId)
-            ->where('status', 'submitted')
-            ->orderByDesc('id')
             ->get();
     }
 
@@ -206,7 +225,7 @@ class AssetRepairService
                 'expense_account_id' => $invoiceInfo['expense_account_id'],
                 'payment_account_id' => $invoiceInfo['payment_account_id'],
                 'payment_mode' => $invoiceInfo['payment_mode'],
-                'repair_cost' => round((float) $row['repair_cost'], 2),
+                'repair_cost' => round((float) $invoiceInfo['grand_total'], 2),
             ];
         }
 
@@ -222,7 +241,7 @@ class AssetRepairService
             ->with(['assetItem', 'assetCategory', 'location'])
             ->first();
 
-        if (! $asset) {
+        if (!$asset) {
             throw new InvalidArgumentException('Invalid submitted asset selected.');
         }
 
@@ -235,20 +254,18 @@ class AssetRepairService
             ->where('company_id', $companyId)
             ->where('id', $purchaseInvoiceId)
             ->where('status', 'submitted')
+            ->whereIn('invoice_type', ['from_receipt', 'manual_inventory'])
             ->first();
 
-        if (! $invoice) {
+        if (!$invoice) {
             throw new InvalidArgumentException('Invalid submitted purchase invoice selected.');
         }
 
         $invoiceData = (array) $invoice;
 
-        $expenseAccountId =
-            $invoiceData['purchase_account_id']
-            ?? $invoiceData['expense_account_id']
-            ?? null;
+        $expenseAccountId = $invoiceData['purchase_account_id'] ?? null;
 
-        if (! $expenseAccountId) {
+        if (!$expenseAccountId) {
             throw new InvalidArgumentException('Expense account is not configured on purchase invoice.');
         }
 
@@ -257,12 +274,10 @@ class AssetRepairService
         $paymentAccountId = match ($paymentMode) {
             'cash' => $invoiceData['cash_account_id'] ?? null,
             'bank' => $invoiceData['bank_account_id'] ?? null,
-            default => $invoiceData['supplier_payable_account_id']
-                ?? $invoiceData['payable_account_id']
-                ?? null,
+            default => $invoiceData['supplier_payable_account_id'] ?? null,
         };
 
-        if (! $paymentAccountId) {
+        if (!$paymentAccountId) {
             throw new InvalidArgumentException('Payment account is not configured on purchase invoice.');
         }
 
@@ -270,108 +285,9 @@ class AssetRepairService
             'expense_account_id' => (int) $expenseAccountId,
             'payment_account_id' => (int) $paymentAccountId,
             'payment_mode' => $paymentMode,
+            'grand_total' => (float) $invoiceData['grand_total'],
         ];
     }
 
-    private function createRepairJournalEntry(AssetRepair $repair, ?int $userId): JournalEntry
-    {
-        $repair->load(['asset', 'items']);
-
-        $entry = JournalEntry::query()->create([
-            'company_id' => $repair->company_id,
-            'entry_number' => $this->generateJournalEntryNumber($repair->company_id),
-            'entry_date' => now()->toDateString(),
-            'description' => 'Asset repair - ' . $repair->asset?->asset_name_en,
-            'status' => 'posted',
-            'posted_at' => now(),
-            'created_by' => $userId,
-            'total_debit' => $repair->repair_cost_total,
-            'total_credit' => $repair->repair_cost_total,
-        ]);
-
-        foreach ($repair->items as $item) {
-            $amount = (float) $item->repair_cost;
-
-            if ($repair->repair_status === 'completed') {
-                $debitAccountId = $item->expense_account_id;
-                $creditAccountId = $item->payment_account_id;
-                $debitNote = 'Maintenance expense';
-                $creditNote = 'Repair invoice payment account';
-            } else {
-                $debitAccountId = $item->payment_account_id;
-                $creditAccountId = $item->expense_account_id;
-                $debitNote = 'Reverse repair payment account';
-                $creditNote = 'Reverse maintenance expense';
-            }
-
-            $debitLine = JournalEntryLine::query()->create([
-                'company_id' => $repair->company_id,
-                'journal_entry_id' => $entry->id,
-                'account_id' => $debitAccountId,
-                'debit' => $amount,
-                'credit' => 0,
-                'note' => $debitNote,
-            ]);
-
-            $creditLine = JournalEntryLine::query()->create([
-                'company_id' => $repair->company_id,
-                'journal_entry_id' => $entry->id,
-                'account_id' => $creditAccountId,
-                'debit' => 0,
-                'credit' => $amount,
-                'note' => $creditNote,
-            ]);
-
-            $this->createLedgerLine($repair->company_id, $entry, $debitLine, $userId);
-            $this->createLedgerLine($repair->company_id, $entry, $creditLine, $userId);
-        }
-
-        return $entry->fresh(['lines.account']);
-    }
-
-    private function createLedgerLine(
-        int $companyId,
-        JournalEntry $entry,
-        JournalEntryLine $line,
-        ?int $userId
-    ): void {
-        $lastBalance = GeneralLedger::query()
-            ->where('company_id', $companyId)
-            ->where('account_id', $line->account_id)
-            ->latest('id')
-            ->value('balance') ?? 0;
-
-        $newBalance = ((float) $lastBalance + (float) $line->debit) - (float) $line->credit;
-
-        GeneralLedger::query()->create([
-            'company_id' => $companyId,
-            'journal_entry_id' => $entry->id,
-            'journal_entry_line_id' => $line->id,
-            'account_id' => $line->account_id,
-            'entry_date' => $entry->entry_date,
-            'debit' => $line->debit,
-            'credit' => $line->credit,
-            'balance' => $newBalance,
-            'description' => $entry->description,
-            'created_by' => $userId,
-        ]);
-    }
-
-    private function generateSeries(int $companyId): string
-    {
-        $lastId = AssetRepair::query()
-            ->where('company_id', $companyId)
-            ->max('id') ?? 0;
-
-        return 'ARPR-' . str_pad((string) ($lastId + 1), 5, '0', STR_PAD_LEFT);
-    }
-
-    private function generateJournalEntryNumber(int $companyId): string
-    {
-        $lastId = JournalEntry::query()
-            ->where('company_id', $companyId)
-            ->max('id') ?? 0;
-
-        return 'JV-' . str_pad((string) ($lastId + 1), 5, '0', STR_PAD_LEFT);
-    }
+ 
 }

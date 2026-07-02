@@ -8,6 +8,7 @@ use App\Models\JournalEntry;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseReceipt;
 use App\Models\ChartOfAccount;
+use App\Models\AssetItem;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -100,6 +101,7 @@ $grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
                 'company_id' => $receipt->company_id,
                 'purchase_receipt_id' => $receipt->id,
                 'purchase_order_id' => $receipt->purchase_order_id,
+                'invoice_type' => 'from_receipt',
                 'supplier_id' => $receipt->supplier_id,
 
                 'invoice_number' => $this->generateInvoiceNumber($receipt->company_id),
@@ -208,6 +210,176 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
             return $invoice->fresh()->load(['supplier','items','taxes.account','fees.account','journalEntry']);
         });
     }
+  public function createManualInventory(array $data, int $companyId): PurchaseInvoice
+{
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $companyId,
+            $data['posting_date'] ?? now()->toDateString(),
+            'create'
+        );
+
+    return DB::transaction(function () use ($data, $companyId) {
+        $accounts = $this->resolveAccounts($companyId, [
+            'posting_method' => $data['posting_method'] ?? 'default',
+            'purchase_account_id' => $data['purchase_account_id'] ?? null,
+            'supplier_payable_account_id' => $data['supplier_payable_account_id'] ?? null,
+        ]);
+
+        $itemTotal = 0;
+        $totalQty = 0;
+
+        foreach ($data['items'] as $row) {
+            $qty = (float) $row['quantity'];
+            $rate = (float) $row['rate'];
+
+            $itemTotal += $qty * $rate;
+            $totalQty += $qty;
+        }
+
+        $discountAmount = 0;
+
+        if (!empty($data['additional_discount_percentage'])) {
+            $discountAmount = round(
+                $itemTotal * ((float) $data['additional_discount_percentage'] / 100),
+                2
+            );
+        }
+
+        if (!empty($data['additional_discount_amount'])) {
+            $discountAmount = round((float) $data['additional_discount_amount'], 2);
+        }
+
+        $netTotal = round($itemTotal - $discountAmount, 2);
+
+        $taxRows = [];
+        $taxTotal = 0;
+
+        foreach (($data['tax_template_ids'] ?? []) as $taxTemplateId) {
+            $template = \App\Models\TaxTemplate::with('lines')
+                ->where('company_id', $companyId)
+                ->findOrFail($taxTemplateId);
+
+            foreach ($template->lines as $line) {
+                $amount = $line->type === 'on_net_total'
+                    ? round($netTotal * ((float) $line->tax_rate / 100), 2)
+                    : round((float) ($line->amount ?? 0), 2);
+
+                $taxRows[] = [
+                    'tax_template_id' => $template->id,
+                    'tax_template_line_id' => $line->id,
+                    'title' => $line->title,
+                    'type' => $line->type,
+                    'account_id' => $line->account_id,
+                    'tax_rate' => $line->tax_rate,
+                    'amount' => $amount,
+                ];
+
+                $taxTotal += $amount;
+            }
+        }
+
+        $feeRows = [];
+        $feesTotal = 0;
+
+        foreach (($data['fees_template_ids'] ?? []) as $feesTemplateId) {
+            $template = \App\Models\FeesTemplate::where('company_id', $companyId)
+                ->findOrFail($feesTemplateId);
+
+            $amount = $template->type === 'percentage'
+                ? round($netTotal * ((float) $template->fees_rate / 100), 2)
+                : round((float) $template->amount, 2);
+
+            $feeRows[] = [
+                'fees_template_id' => $template->id,
+                'title' => $template->title,
+                'type' => $template->type,
+                'account_id' => $template->account_id,
+                'fees_rate' => $template->fees_rate,
+                'amount' => $amount,
+            ];
+
+            $feesTotal += $amount;
+        }
+
+        $grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
+
+        $invoice = PurchaseInvoice::create([
+            'company_id' => $companyId,
+            'purchase_receipt_id' => null,
+            'purchase_order_id' => null,
+            'invoice_type' => 'manual_inventory',
+            'supplier_id' => $data['supplier_id'],
+
+            'invoice_number' => $this->generateInvoiceNumber($companyId),
+            'posting_date' => $data['posting_date'] ?? now()->toDateString(),
+            'posting_time' => $data['posting_time'] ?? now()->format('H:i:s'),
+            'due_date' => $data['due_date'] ?? null,
+
+            'supplier_invoice_no' => $data['supplier_invoice_no'] ?? null,
+            'supplier_invoice_date' => $data['supplier_invoice_date'] ?? null,
+
+            'posting_method' => $data['posting_method'] ?? 'default',
+            'payment_mode' => 'credit',
+
+            'stock_account_id' => null,
+            'purchase_account_id' => $accounts['purchase_account_id'],
+            'supplier_payable_account_id' => $accounts['supplier_payable_account_id'],
+            'cash_account_id' => $accounts['cash_account_id'],
+            'bank_account_id' => $accounts['bank_account_id'],
+
+            'total_qty' => $totalQty,
+            'net_total' => $netTotal,
+            'tax_total' => round($taxTotal, 2),
+            'fees_total' => round($feesTotal, 2),
+            'discount_percentage' => $data['additional_discount_percentage'] ?? 0,
+            'discount_amount' => $discountAmount,
+            'grand_total' => $grandTotal,
+            'paid_amount' => 0,
+            'outstanding_amount' => $grandTotal,
+
+            'status' => 'draft',
+            'created_by' => auth('api')->id(),
+        ]);
+
+        foreach ($data['items'] as $row) {
+            $item = \App\Models\Item::where('company_id', $companyId)
+                ->where('id', $row['item_id'])
+                ->firstOrFail();
+
+            $qty = (float) $row['quantity'];
+            $rate = (float) $row['rate'];
+
+            $invoice->items()->create([
+                'purchase_receipt_item_id' => null,
+                'item_id' => $item->id,
+                'asset_item_id' => null,
+                'warehouse_id' => $row['warehouse_id'] ?? null,
+                'item_code' => $item->item_code,
+                'item_name_ar' => $item->name_ar,
+                'item_name_en' => $item->name_en,
+                'quantity' => $qty,
+                'rate' => $rate,
+                'amount' => round($qty * $rate, 2),
+            ]);
+        }
+
+        foreach ($taxRows as $row) {
+            $invoice->taxes()->create($row);
+        }
+
+        foreach ($feeRows as $row) {
+            $invoice->fees()->create($row);
+        }
+
+        return $invoice->fresh()->load([
+            'supplier',
+            'items.item',
+            'taxes.account',
+            'fees.account',
+        ]);
+    });
+}
 public function update(PurchaseInvoice $invoice, array $data): PurchaseInvoice
 {
     if ($invoice->status !== 'draft') {
@@ -262,6 +434,194 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         ]);
     });
 }
+public function createManual(array $data, int $companyId): PurchaseInvoice
+{
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $companyId,
+            $data['posting_date'] ?? now()->toDateString(),
+            'create'
+        );
+
+    return DB::transaction(function () use ($data, $companyId) {
+        $accounts = $this->resolveAccounts($companyId, $data);
+
+        $itemTotal = 0;
+        $totalQty = 0;
+        $fixedAssetAccountId = null;
+
+        foreach ($data['items'] as $row) {
+            $assetItem = AssetItem::with('assetCategory')
+                ->where('company_id', $companyId)
+                ->where('id', $row['asset_item_id'])
+                ->where('is_active', true)
+                ->firstOrFail();
+
+            $categoryFixedAssetAccountId = $assetItem->assetCategory?->fixed_asset_account_id;
+
+            if (! $categoryFixedAssetAccountId) {
+                throw new RuntimeException('Fixed Asset Account is required on Asset Category.');
+            }
+
+            if ($fixedAssetAccountId === null) {
+                $fixedAssetAccountId = (int) $categoryFixedAssetAccountId;
+            }
+
+            if ((int) $fixedAssetAccountId !== (int) $categoryFixedAssetAccountId) {
+                throw new RuntimeException('All asset items must belong to categories with the same Fixed Asset Account.');
+            }
+
+            $qty = (float) $row['quantity'];
+            $rate = (float) $row['rate'];
+
+            $itemTotal += $qty * $rate;
+            $totalQty += $qty;
+        }
+
+        $discountAmount = 0;
+
+        if (! empty($data['additional_discount_percentage'])) {
+            $discountAmount = round(
+                $itemTotal * ((float) $data['additional_discount_percentage'] / 100),
+                2
+            );
+        }
+
+        if (! empty($data['additional_discount_amount'])) {
+            $discountAmount = round((float) $data['additional_discount_amount'], 2);
+        }
+
+        $netTotal = round($itemTotal - $discountAmount, 2);
+
+        $taxRows = [];
+        $taxTotal = 0;
+
+        foreach (($data['tax_template_ids'] ?? []) as $taxTemplateId) {
+            $template = \App\Models\TaxTemplate::with('lines')
+                ->where('company_id', $companyId)
+                ->findOrFail($taxTemplateId);
+
+            foreach ($template->lines as $line) {
+                $amount = $line->type === 'on_net_total'
+                    ? round($netTotal * ((float) $line->tax_rate / 100), 2)
+                    : round((float) ($line->amount ?? 0), 2);
+
+                $taxRows[] = [
+                    'tax_template_id' => $template->id,
+                    'tax_template_line_id' => $line->id,
+                    'title' => $line->title,
+                    'type' => $line->type,
+                    'account_id' => $line->account_id,
+                    'tax_rate' => $line->tax_rate,
+                    'amount' => $amount,
+                ];
+
+                $taxTotal += $amount;
+            }
+        }
+
+        $feeRows = [];
+        $feesTotal = 0;
+
+        foreach (($data['fees_template_ids'] ?? []) as $feesTemplateId) {
+            $template = \App\Models\FeesTemplate::query()
+                ->where('company_id', $companyId)
+                ->findOrFail($feesTemplateId);
+
+            $amount = $template->type === 'percentage'
+                ? round($netTotal * ((float) $template->fees_rate / 100), 2)
+                : round((float) $template->amount, 2);
+
+            $feeRows[] = [
+                'fees_template_id' => $template->id,
+                'title' => $template->title,
+                'type' => $template->type,
+                'account_id' => $template->account_id,
+                'fees_rate' => $template->fees_rate,
+                'amount' => $amount,
+            ];
+
+            $feesTotal += $amount;
+        }
+
+        $grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
+
+        $invoice = PurchaseInvoice::create([
+            'company_id' => $companyId,
+            'purchase_receipt_id' => null,
+            'purchase_order_id' => null,
+            'invoice_type' => 'manual_asset',
+            'supplier_id' => $data['supplier_id'],
+
+            'invoice_number' => $this->generateInvoiceNumber($companyId),
+            'posting_date' => $data['posting_date'] ?? now()->toDateString(),
+            'posting_time' => $data['posting_time'] ?? now()->format('H:i:s'),
+            'due_date' => $data['due_date'] ?? null,
+
+            'supplier_invoice_no' => $data['supplier_invoice_no'] ?? null,
+            'supplier_invoice_date' => $data['supplier_invoice_date'] ?? null,
+
+            'posting_method' => $data['posting_method'] ?? 'manual',
+            'payment_mode' => 'credit',
+
+            'stock_account_id' => null,
+            'purchase_account_id' => $fixedAssetAccountId,
+            'supplier_payable_account_id' => $accounts['supplier_payable_account_id'],
+            'cash_account_id' => $accounts['cash_account_id'],
+            'bank_account_id' => $accounts['bank_account_id'],
+
+            'total_qty' => $totalQty,
+            'net_total' => $netTotal,
+            'tax_total' => round($taxTotal, 2),
+            'fees_total' => round($feesTotal, 2),
+            'discount_amount' => $discountAmount,
+            'grand_total' => $grandTotal,
+            'paid_amount' => 0,
+            'outstanding_amount' => $grandTotal,
+
+            'status' => 'draft',
+            'created_by' => auth('api')->id(),
+        ]);
+
+        foreach ($data['items'] as $row) {
+            $assetItem = AssetItem::where('company_id', $companyId)
+                ->where('id', $row['asset_item_id'])
+                ->where('is_active', true)
+                ->firstOrFail();
+
+            $qty = (float) $row['quantity'];
+            $rate = (float) $row['rate'];
+
+            $invoice->items()->create([
+                'purchase_receipt_item_id' => null,
+                'item_id' => null,
+                'asset_item_id' => $assetItem->id,
+                'warehouse_id' => null,
+                'item_code' => $assetItem->item_code,
+                'item_name_ar' => $assetItem->item_name,
+                'item_name_en' => $assetItem->item_name,
+                'quantity' => $qty,
+                'rate' => $rate,
+                'amount' => round($qty * $rate, 2),
+            ]);
+        }
+
+        foreach ($taxRows as $row) {
+            $invoice->taxes()->create($row);
+        }
+
+        foreach ($feeRows as $row) {
+            $invoice->fees()->create($row);
+        }
+
+        return $invoice->fresh()->load([
+            'supplier',
+            'items.assetItem.assetCategory',
+            'taxes.account',
+            'fees.account',
+        ]);
+    });
+}
     public function cancel(PurchaseInvoice $invoice): PurchaseInvoice
     {
         if ($invoice->status !== 'submitted') {
@@ -285,16 +645,11 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         });
     }
 
-   private function resolveAccounts(int $companyId, array $data): array
+ private function resolveAccounts(int $companyId, array $data): array
 {
     if (($data['posting_method'] ?? 'default') === 'manual') {
         return [
-            'stock_account_id' => $this->resolveManualAccount(
-                $companyId,
-                $data['stock_account_id'] ?? null,
-                ['stock'],
-                'Stock Account'
-            ),
+            'stock_account_id' => null,
 
             'purchase_account_id' => $this->resolveManualAccount(
                 $companyId,
@@ -310,21 +665,8 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
                 'Supplier Payable Account'
             ),
 
-            'cash_account_id' => $this->resolveManualAccount(
-                $companyId,
-                $data['cash_account_id'] ?? null,
-                ['cash'],
-                'Cash Account',
-                false
-            ),
-
-            'bank_account_id' => $this->resolveManualAccount(
-                $companyId,
-                $data['bank_account_id'] ?? null,
-                ['bank'],
-                'Bank Account',
-                false
-            ),
+            'cash_account_id' => null,
+            'bank_account_id' => null,
         ];
     }
 
@@ -337,8 +679,7 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         'cash_account_id' => $settings->default_cash_account_id,
         'bank_account_id' => $settings->default_bank_account_id,
     ];
-}
-private function resolveManualAccount(
+}private function resolveManualAccount(
     int $companyId,
     ?int $accountId,
     array $allowedTypes,
@@ -371,7 +712,7 @@ private function resolveManualAccount(
 
     return $account->id;
 }
-   private function createJournalEntry(PurchaseInvoice $invoice): JournalEntry
+  private function createJournalEntry(PurchaseInvoice $invoice): JournalEntry
 {
     $invoice->loadMissing(['items', 'taxes', 'fees']);
 
@@ -391,13 +732,30 @@ private function resolveManualAccount(
     $debit = 0;
     $credit = 0;
 
+ if ($invoice->invoice_type === 'from_receipt') {
+    $debitAccountId = $invoice->stock_account_id;
+    $note = 'Inventory / Purchases';
+} elseif ($invoice->invoice_type === 'manual_inventory') {
+    $debitAccountId = $invoice->purchase_account_id;
+    $note = 'Purchase Account';
+} elseif ($invoice->invoice_type === 'manual_asset') {
+    $debitAccountId = $invoice->purchase_account_id;
+    $note = 'Fixed Asset';
+} else {
+    throw new RuntimeException('Invalid purchase invoice type.');
+}
+    if (! $debitAccountId) {
+        throw new RuntimeException('Debit account is required for purchase invoice.');
+    }
+
     $entry->lines()->create([
         'company_id' => $invoice->company_id,
-        'account_id' => $invoice->stock_account_id,
+        'account_id' => $debitAccountId,
         'debit' => $itemsTotal,
         'credit' => 0,
-        'note' => 'Inventory / Purchases',
+        'note' => $note,
     ]);
+
     $debit += $itemsTotal;
 
     foreach ($invoice->taxes as $tax) {
@@ -439,9 +797,18 @@ private function resolveManualAccount(
     $discountAmount = abs((float) $invoice->discount_amount);
 
     if ($discountAmount > 0) {
+        $settings = CompanyAccountSetting::where('company_id', $invoice->company_id)
+            ->firstOrFail();
+
+        $discountAccountId = $settings->default_indirect_income_account_id;
+
+        if (! $discountAccountId) {
+            throw new RuntimeException('Default Indirect Income Account is not configured.');
+        }
+
         $entry->lines()->create([
             'company_id' => $invoice->company_id,
-            'account_id' => $invoice->purchase_account_id,
+            'account_id' => $discountAccountId,
             'debit' => 0,
             'credit' => $discountAmount,
             'note' => 'Purchase Discount',
@@ -479,7 +846,6 @@ private function resolveManualAccount(
 
     return $entry;
 }
-
     private function createReverseJournalEntry(PurchaseInvoice $invoice): JournalEntry
     {
         $original = $invoice->journalEntry()->with('lines')->firstOrFail();
@@ -529,7 +895,27 @@ private function resolveManualAccount(
 
     return $prefix . str_pad($next, 5, '0', STR_PAD_LEFT);
 }
+public function availablePurchaseInvoices(int $companyId, ?string $search = null)
+{
+   PurchaseInvoice::query()
+    ->where('company_id', $companyId)
+    ->where('status', 'submitted')
+    ->whereIn('invoice_type', [
+        'from_receipt',
+        'manual_inventory',
+    ])
 
+        ->select([
+            'id',
+            'invoice_number',
+            'supplier_invoice_no',
+            'supplier_id',
+            'posting_date',
+            'grand_total',
+        ])
+        ->latest()
+        ->get();
+}
    private function generateJournalEntryNumber(int $companyId): string
 {
     $year = now()->format('Y');

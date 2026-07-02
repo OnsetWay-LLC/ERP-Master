@@ -11,6 +11,10 @@ use App\Models\TaxTemplate;
 use App\Models\WarehouseStock;
 use App\Models\Warehouse;
 use App\Models\SalesPerson;
+use App\Models\DiscountApprovalRequest;
+use App\Models\DiscountSetting;
+use App\Models\User;
+use App\Notifications\DiscountApprovalRequestedNotification;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -28,6 +32,7 @@ class SalesOrderService
                 'taxes',
                 'fees',
                 'pickList',
+                'pendingDiscountApproval',
             ])
             ->where('company_id', $companyId)
             ->latest()
@@ -44,107 +49,291 @@ class SalesOrderService
             'fees.account',
             'creator',
             'pickList.items.warehouse',
+            'pendingDiscountApproval',
+            'approvedDiscountApproval',
+            'rejectedDiscountApproval',
         ]);
     }
 
-    public function create(array $data): SalesOrder
-    {
+   public function create(array $data): SalesOrder
+{
+    $company = Company::query()->firstOrFail();
+
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $company->id,
+            $data['order_date'],
+            'create'
+        );
+
+    return DB::transaction(function () use ($data) {
         $company = Company::query()->firstOrFail();
 
-app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $company->id,
-        $data['order_date'],
-        'create'
-    );
-        return DB::transaction(function () use ($data) {
-            $company = Company::query()->firstOrFail();
+        $discountDecision = $this->handleDiscountDecision($company->id, $data);
+        $data['discount_percentage'] = $discountDecision['applied_discount_percentage'];
 
-            $totals = $this->calculateTotals($company->id, $data);
+        $totals = $this->calculateTotals($company->id, $data);
 
-            $salesOrder = SalesOrder::query()->create([
-                'company_id' => $company->id,
-                'customer_id' => $data['customer_id'],
-                'order_number' => $this->generateOrderNumber($company->id),
-                'order_date' => $data['order_date'],
-                'delivery_date' => $data['delivery_date'] ?? null,
-                'net_total' => $totals['net_total'],
-                'tax_total' => $totals['tax_total'],
-                'fees_total' => $totals['fees_total'],
-                'discount_percentage' => $totals['discount_percentage'],
-                'discount_amount' => $totals['discount_amount'],
-                'grand_total' => $totals['grand_total'],
-                'status' => 'draft',
-                'created_by' => auth('api')->id(),
-            ]);
+        $salesOrder = SalesOrder::query()->create([
+            'company_id' => $company->id,
+            'customer_id' => $data['customer_id'],
+            'sales_person_id' => $data['sales_person_id'] ?? null,
+            'order_number' => $this->generateOrderNumber($company->id),
+            'order_date' => $data['order_date'],
+            'delivery_date' => $data['delivery_date'] ?? null,
+            'net_total' => $totals['net_total'],
+            'tax_total' => $totals['tax_total'],
+            'fees_total' => $totals['fees_total'],
+            'discount_percentage' => $data['discount_percentage'],
+            'discount_amount' => $totals['discount_amount'],
+            'grand_total' => $totals['grand_total'],
+            'status' => 'draft',
+            'created_by' => auth('api')->id(),
+        ]);
 
-            $this->saveItems($salesOrder, $company->id, $data['items']);
-            $this->saveTaxes($salesOrder, $company->id, $data['tax_template_ids'] ?? [], $totals['net_total']);
-            $this->saveFees($salesOrder, $company->id, $data['fees_template_ids'] ?? [], $totals['net_total']);
+        $this->saveItems($salesOrder, $company->id, $data['items']);
+        $this->saveTaxes($salesOrder, $company->id, $data['tax_template_ids'] ?? [], $totals['net_total']);
+        $this->saveFees($salesOrder, $company->id, $data['fees_template_ids'] ?? [], $totals['net_total']);
 
-            return $salesOrder->fresh()->load([
-                'customer',
-                'items.item',
-                'items.warehouse',
-                'taxes',
-                'fees',
-                'pickList',
-            ]);
-        });
-    }
-
-    public function update(SalesOrder $salesOrder, array $data): SalesOrder
-    {
-        if ($salesOrder->status !== 'draft') {
-            throw new RuntimeException('Only draft sales orders can be updated.');
+        if ($discountDecision['requires_approval']) {
+            $this->createDiscountApprovalRequest(
+                $salesOrder,
+                $discountDecision['requested_discount_percentage'],
+                $discountDecision['allowed_discount_percentage']
+            );
         }
 
-        return DB::transaction(function () use ($salesOrder, $data) {
-            $companyId = $salesOrder->company_id;
-app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $companyId,
-        $data['order_date'] ?? $salesOrder->order_date,
-        'update'
-    );
-            $totals = $this->calculateTotals($companyId, $data);
+        return $salesOrder->fresh()->load([
+            'customer',
+            'items.item',
+            'items.warehouse',
+            'taxes',
+            'fees',
+            'pickList',
+            'pendingDiscountApproval',
+        ]);
+    });
+}
+private function handleDiscountDecision(int $companyId, array $data): array
+{
+    $requestedDiscount = (float) ($data['discount_percentage'] ?? 0);
 
-            $salesOrder->update([
-                'customer_id' => $data['customer_id'],
-                'order_date' => $data['order_date'],
-                'delivery_date' => $data['delivery_date'] ?? null,
-                'net_total' => $totals['net_total'],
-                'tax_total' => $totals['tax_total'],
-                'fees_total' => $totals['fees_total'],
-                'discount_percentage' => $totals['discount_percentage'],
-                'discount_amount' => $totals['discount_amount'],
-                'grand_total' => $totals['grand_total'],
-            ]);
-
-            $salesOrder->items()->delete();
-            $salesOrder->taxes()->delete();
-            $salesOrder->fees()->delete();
-
-            $this->saveItems($salesOrder, $companyId, $data['items']);
-            $this->saveTaxes($salesOrder, $companyId, $data['tax_template_ids'] ?? [], $totals['net_total']);
-            $this->saveFees($salesOrder, $companyId, $data['fees_template_ids'] ?? [], $totals['net_total']);
-
-            return $salesOrder->fresh()->load([
-                'customer',
-                'items.item',
-                'items.warehouse',
-                'taxes',
-                'fees',
-                'pickList',
-            ]);
-        });
+    if ($requestedDiscount <= 0) {
+        return [
+            'requires_approval' => false,
+            'applied_discount_percentage' => 0,
+            'requested_discount_percentage' => 0,
+            'allowed_discount_percentage' => 0,
+        ];
     }
+
+    $user = auth('api')->user();
+
+    if (! $user) {
+        throw new RuntimeException('Unauthenticated user.');
+    }
+
+    $settings = DiscountSetting::query()
+        ->where('company_id', $companyId)
+        ->first();
+
+    if (! $settings) {
+        throw new RuntimeException('Discount settings are not configured.');
+    }
+
+    $allowedDiscount = $this->getAllowedDiscountForUser($user, $settings);
+
+    if ($requestedDiscount <= $allowedDiscount) {
+        return [
+            'requires_approval' => false,
+            'applied_discount_percentage' => $requestedDiscount,
+            'requested_discount_percentage' => $requestedDiscount,
+            'allowed_discount_percentage' => $allowedDiscount,
+        ];
+    }
+
+    return [
+        'requires_approval' => true,
+        'applied_discount_percentage' => 0,
+        'requested_discount_percentage' => $requestedDiscount,
+        'allowed_discount_percentage' => $allowedDiscount,
+    ];
+}
+
+private function getAllowedDiscountForUser($user, DiscountSetting $settings): float
+{
+    if ($user->hasRole('Accountant Sub')) {
+        return (float) $settings->sub_accountant_max_discount;
+    }
+  if ($user->hasRole( 'Sales Officer')) {
+        return (float) $settings->sub_accountant_max_discount;
+    }
+    if ($user->hasRole('Accountant Chief')) {
+        return (float) $settings->department_manager_max_discount;
+    }
+
+    if ($user->hasRole('CFO')) {
+        return 100;
+    }
+
+    return 0;
+}
+
+private function createDiscountApprovalRequest(
+    SalesOrder $salesOrder,
+    float $requestedDiscount,
+    float $allowedDiscount
+): void {
+    $settings = DiscountSetting::query()
+        ->where('company_id', $salesOrder->company_id)
+        ->firstOrFail();
+
+    $approvalLevel = $requestedDiscount <= (float) $settings->department_manager_max_discount
+        ? 'department_manager'
+        : 'cfo';
+
+    $status = $approvalLevel === 'department_manager'
+        ? 'pending_department_manager_approval'
+        : 'pending_department_manager_decision';
+
+    $approvalRequest = DiscountApprovalRequest::query()
+        ->where('sales_order_id', $salesOrder->id)
+        ->whereIn('status', [
+            'pending_department_manager_approval',
+            'pending_department_manager_decision',
+            'pending_cfo_approval',
+        ])
+        ->first();
+
+    if ($approvalRequest) {
+        $approvalRequest->update([
+            'requested_discount_percentage' => $requestedDiscount,
+            'allowed_discount_percentage' => $allowedDiscount,
+            'approval_level' => $approvalLevel,
+            'status' => $status,
+            'rejection_reason' => null,
+            'approved_by' => null,
+            'responded_at' => null,
+            'forwarded_by' => null,
+            'forwarded_at' => null,
+        ]);
+
+        $approvalRequest = $approvalRequest->fresh(['salesOrder', 'requester']);
+    } else {
+        $approvalRequest = DiscountApprovalRequest::query()->create([
+            'company_id' => $salesOrder->company_id,
+            'sales_order_id' => $salesOrder->id,
+            'sales_invoice_id' => null,
+            'requested_by' => auth('api')->id(),
+            'requested_discount_percentage' => $requestedDiscount,
+            'allowed_discount_percentage' => $allowedDiscount,
+            'approval_level' => $approvalLevel,
+            'status' => $status,
+        ])->load(['salesOrder', 'requester']);
+    }
+
+    foreach (User::role('Accountant Chief')->get() as $manager) {
+        $manager->notify(
+            new DiscountApprovalRequestedNotification($approvalRequest)
+        );
+    }
+}
+   public function update(SalesOrder $salesOrder, array $data): SalesOrder
+{
+    if ($salesOrder->status !== 'draft') {
+        throw new RuntimeException('Only draft sales orders can be updated.');
+    }
+
+    return DB::transaction(function () use ($salesOrder, $data) {
+        $companyId = $salesOrder->company_id;
+
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+            ->validateTransactionDate(
+                $companyId,
+                $data['order_date'] ?? $salesOrder->order_date,
+                'update'
+            );
+
+       if (! array_key_exists('discount_percentage', $data)) {
+    $data['discount_percentage'] = $salesOrder->discount_percentage;
+}
+
+$discountDecision = $this->handleDiscountDecision($companyId, $data);
+        $data['discount_percentage'] = $discountDecision['applied_discount_percentage'];
+
+        $totals = $this->calculateTotals($companyId, $data);
+
+        $salesOrder->update([
+            'customer_id' => $data['customer_id'],
+            'sales_person_id' => $data['sales_person_id'] ?? $salesOrder->sales_person_id,
+            'order_date' => $data['order_date'],
+            'delivery_date' => $data['delivery_date'] ?? null,
+            'net_total' => $totals['net_total'],
+            'tax_total' => $totals['tax_total'],
+            'fees_total' => $totals['fees_total'],
+            'discount_percentage' => $data['discount_percentage'],
+            'discount_amount' => $totals['discount_amount'],
+            'grand_total' => $totals['grand_total'],
+        ]);
+
+        $salesOrder->items()->delete();
+        $salesOrder->taxes()->delete();
+        $salesOrder->fees()->delete();
+
+        $this->saveItems($salesOrder, $companyId, $data['items']);
+        $this->saveTaxes($salesOrder, $companyId, $data['tax_template_ids'] ?? [], $totals['net_total']);
+        $this->saveFees($salesOrder, $companyId, $data['fees_template_ids'] ?? [], $totals['net_total']);
+
+        if ($discountDecision['requires_approval']) {
+            $this->createDiscountApprovalRequest(
+                $salesOrder,
+                $discountDecision['requested_discount_percentage'],
+                $discountDecision['allowed_discount_percentage']
+            );
+        }
+
+        return $salesOrder->fresh()->load([
+            'customer',
+            'items.item',
+            'items.warehouse',
+            'taxes',
+            'fees',
+            'pickList',
+            'pendingDiscountApproval',
+        ]);
+    });
+}
 
     public function submit(SalesOrder $salesOrder): SalesOrder
     {
         if ($salesOrder->status !== 'draft') {
             throw new RuntimeException('Only draft sales orders can be submitted.');
         }
+        $pendingApproval = DiscountApprovalRequest::query()
+    ->where('sales_order_id', $salesOrder->id)
+    ->whereIn('status', [
+        'pending_department_manager_approval',
+        'pending_department_manager_decision',
+        'pending_cfo_approval',
+    ])
+    ->exists();
+
+if ($pendingApproval) {
+    throw new RuntimeException(
+        'Cannot submit sales order while discount approval is pending.'
+    );
+}
+
+$rejectedApproval = DiscountApprovalRequest::query()
+    ->where('sales_order_id', $salesOrder->id)
+    ->where('status', 'rejected')
+    ->exists();
+
+if ($rejectedApproval) {
+    throw new RuntimeException(
+        'Cannot submit sales order because discount approval was rejected.'
+    );
+}
 app(\App\Services\FinancialYear\FinancialYearService::class)
     ->validateTransactionDate(
         $salesOrder->company_id,
@@ -189,7 +378,78 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
             ]);
         });
     }
+public function applyApprovedDiscount(
+    SalesOrder $salesOrder,
+    float $discountPercentage
+): SalesOrder {
+    if ($salesOrder->status !== 'draft') {
+        throw new RuntimeException('Discount can only be applied to draft sales orders.');
+    }
 
+    return DB::transaction(function () use ($salesOrder, $discountPercentage) {
+        $salesOrder->load(['items', 'taxes', 'fees']);
+
+        $data = [
+            'discount_percentage' => $discountPercentage,
+
+            'items' => $salesOrder->items->map(fn ($item) => [
+                'item_id' => $item->item_id,
+                'warehouse_id' => $item->warehouse_id,
+                'quantity' => $item->quantity,
+                'rate' => $item->rate,
+            ])->toArray(),
+
+            'tax_template_ids' => $salesOrder->taxes
+                ->pluck('tax_template_id')
+                ->unique()
+                ->values()
+                ->toArray(),
+
+            'fees_template_ids' => $salesOrder->fees
+                ->pluck('fees_template_id')
+                ->unique()
+                ->values()
+                ->toArray(),
+        ];
+
+        $totals = $this->calculateTotals($salesOrder->company_id, $data);
+
+        $salesOrder->update([
+            'discount_percentage' => $discountPercentage,
+            'discount_amount' => $totals['discount_amount'],
+            'net_total' => $totals['net_total'],
+            'tax_total' => $totals['tax_total'],
+            'fees_total' => $totals['fees_total'],
+            'grand_total' => $totals['grand_total'],
+        ]);
+
+        $salesOrder->taxes()->delete();
+        $salesOrder->fees()->delete();
+
+        $this->saveTaxes(
+            $salesOrder,
+            $salesOrder->company_id,
+            $data['tax_template_ids'],
+            $totals['net_total']
+        );
+
+        $this->saveFees(
+            $salesOrder,
+            $salesOrder->company_id,
+            $data['fees_template_ids'],
+            $totals['net_total']
+        );
+
+        return $salesOrder->fresh([
+            'customer',
+            'items.item',
+            'items.warehouse',
+            'taxes',
+            'fees',
+            'pickList',
+        ]);
+    });
+}
     public function cancel(SalesOrder $salesOrder): SalesOrder
     {
         if (in_array($salesOrder->status, ['to_bill', 'completed'])) {
@@ -242,19 +502,20 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         });
     }
 
-    public function delete(SalesOrder $salesOrder): void
-    {
-        if ($salesOrder->status !== 'draft') {
-            throw new RuntimeException('Only draft sales orders can be deleted.');
-        }
-
-        DB::transaction(function () use ($salesOrder) {
-            $salesOrder->items()->delete();
-            $salesOrder->taxes()->delete();
-            $salesOrder->fees()->delete();
-            $salesOrder->delete();
-        });
+   public function delete(SalesOrder $salesOrder): void
+{
+    if ($salesOrder->status !== 'draft') {
+        throw new RuntimeException('Only draft sales orders can be deleted.');
     }
+
+    DB::transaction(function () use ($salesOrder) {
+        $salesOrder->discountApprovalRequests()->delete();
+        $salesOrder->items()->delete();
+        $salesOrder->taxes()->delete();
+        $salesOrder->fees()->delete();
+        $salesOrder->delete();
+    });
+}
 
     private function createPickListAutomatically(SalesOrder $salesOrder): void
     {

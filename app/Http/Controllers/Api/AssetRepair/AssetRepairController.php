@@ -9,6 +9,7 @@ use App\Http\Resources\AssetRepair\AssetRepairResource;
 use App\Models\AssetRepair;
 use App\Services\AssetRepair\AssetRepairService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use InvalidArgumentException;
 
 class AssetRepairController extends Controller
@@ -46,6 +47,7 @@ class AssetRepairController extends Controller
                 'message' => 'Asset repair created successfully.',
                 'data' => new AssetRepairResource($repair),
             ], 201);
+
         } catch (InvalidArgumentException $e) {
             return response()->json([
                 'status' => false,
@@ -76,27 +78,23 @@ class AssetRepairController extends Controller
         ]);
     }
 
-    public function update(UpdateAssetRepairRequest $request, AssetRepair $assetRepair): JsonResponse
-    {
-        if ((int) $assetRepair->company_id !== $this->companyId()) {
-            abort(404);
-        }
+   public function update(UpdateAssetRepairRequest $request, AssetRepair $assetRepair): JsonResponse
+{
+    try {
+        $repair = $this->service->update($assetRepair, $request->validated());
 
-        try {
-            $updated = $this->service->update($assetRepair, $request->validated());
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Asset repair updated successfully.',
-                'data' => new AssetRepairResource($updated),
-            ]);
-        } catch (InvalidArgumentException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => $e->getMessage(),
-            ], 422);
-        }
+        return response()->json([
+            'status' => true,
+            'message' => 'Asset repair updated successfully.',
+            'data' => new AssetRepairResource($repair),
+        ]);
+    } catch (InvalidArgumentException $e) {
+        return response()->json([
+            'status' => false,
+            'message' => $e->getMessage(),
+        ], 422);
     }
+}
 
     public function submit(AssetRepair $assetRepair): JsonResponse
     {
@@ -105,13 +103,40 @@ class AssetRepairController extends Controller
         }
 
         try {
-            $submitted = $this->service->submit($assetRepair, auth('api')->id());
+            $submitted = $this->service->submit(
+                $assetRepair,
+                auth('api')->id()
+            );
 
             return response()->json([
                 'status' => true,
                 'message' => 'Asset repair submitted successfully.',
                 'data' => new AssetRepairResource($submitted),
             ]);
+
+        } catch (InvalidArgumentException $e) {
+            return response()->json([
+                'status' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function cancel(AssetRepair $assetRepair): JsonResponse
+    {
+        if ((int) $assetRepair->company_id !== $this->companyId()) {
+            abort(404);
+        }
+
+        try {
+            $cancelled = $this->service->cancel($assetRepair);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Asset repair cancelled successfully.',
+                'data' => new AssetRepairResource($cancelled),
+            ]);
+
         } catch (InvalidArgumentException $e) {
             return response()->json([
                 'status' => false,
@@ -133,6 +158,7 @@ class AssetRepairController extends Controller
                 'status' => true,
                 'message' => 'Asset repair deleted successfully.',
             ]);
+
         } catch (InvalidArgumentException $e) {
             return response()->json([
                 'status' => false,
@@ -149,11 +175,14 @@ class AssetRepairController extends Controller
         ]);
     }
 
-    public function purchaseInvoices(): JsonResponse
+    public function purchaseInvoices(Request $request): JsonResponse
     {
         return response()->json([
             'status' => true,
-            'data' => $this->service->availablePurchaseInvoices($this->companyId()),
+            'data' => $this->service->availablePurchaseInvoices(
+                $this->companyId(),
+                $request->search
+            ),
         ]);
     }
 }

@@ -2,18 +2,21 @@
 
 namespace App\Http\Resources\PurchaseInvoice;
 
-use Illuminate\Http\Request;
+use App\Models\CompanyAccountSetting;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class PurchaseInvoiceResource extends JsonResource
 {
     public function toArray($request): array
     {
+        $settings = CompanyAccountSetting::where('company_id', $this->company_id)->first();
+
         return [
             'id' => $this->id,
             'invoice_number' => $this->invoice_number,
             'purchase_receipt_id' => $this->purchase_receipt_id,
             'purchase_order_id' => $this->purchase_order_id,
+            'invoice_type' => $this->invoice_type,
             'supplier_id' => $this->supplier_id,
 
             'posting_date' => $this->posting_date,
@@ -24,7 +27,11 @@ class PurchaseInvoiceResource extends JsonResource
             'supplier_invoice_date' => $this->supplier_invoice_date,
 
             'posting_method' => $this->posting_method,
-          
+
+            'supplier_payable_account_id' => $this->supplier_payable_account_id,
+            'fixed_asset_account_id' => $this->purchase_account_id,
+            'discount_account_id' => $settings?->default_indirect_income_account_id,
+
             'net_total' => (float) $this->net_total,
             'tax_total' => (float) $this->tax_total,
             'fees_total' => (float) $this->fees_total,
@@ -35,6 +42,12 @@ class PurchaseInvoiceResource extends JsonResource
 
             'status' => $this->status,
             'journal_entry_id' => $this->journal_entry_id,
+
+            'accounts_source' => [
+                'fixed_asset_account_id' => 'asset_item.asset_category.fixed_asset_account_id',
+                'discount_account_id' => 'company_account_settings.default_indirect_income_account_id',
+                'supplier_payable_account_id' => 'request.supplier_payable_account_id',
+            ],
 
             'supplier' => $this->whenLoaded('supplier'),
             'items' => $this->whenLoaded('items'),

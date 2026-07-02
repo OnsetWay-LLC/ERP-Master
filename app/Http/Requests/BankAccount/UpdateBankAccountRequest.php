@@ -55,11 +55,16 @@ class UpdateBankAccountRequest extends FormRequest
             'branch_code' => ['nullable', 'string', 'max:50'],
 
             'bank_account_no' => [
-                'sometimes',
-                'required',
-                'string',
-                'max:100',
-            ],
+    'sometimes',
+    'required',
+    'string',
+    'max:100',
+    Rule::unique('bank_accounts', 'bank_account_no')
+        ->where('company_id', $companyId)
+        ->where('bank_id', $this->input('bank_id'))
+        ->whereNull('deleted_at')
+        ->ignore($id),
+],
 
             'swift_code_bic' => [
                 'nullable',
@@ -67,17 +72,22 @@ class UpdateBankAccountRequest extends FormRequest
                 'max:11',
                 'regex:/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/',
             ],
-
-            'account_id' => [
-                'nullable',
-                'integer',
-                Rule::exists('chart_of_accounts', 'id')
-                    ->where('company_id', $companyId)
-                    ->where('account_type', 'bank')
-                    ->where('account_level', 'child')
-                    ->where('is_active', true)
-                    ->whereNull('deleted_at'),
-            ],
+'is_company' => [
+    'sometimes',
+    'required',
+    'boolean',
+],
+           'account_id' => [
+    'nullable',
+    'required_if:is_company,1',
+    'integer',
+    Rule::exists('chart_of_accounts', 'id')
+        ->where('company_id', $companyId)
+        ->where('account_type', 'bank')
+        ->where('account_level', 'child')
+        ->where('is_active', true)
+        ->whereNull('deleted_at'),
+],
         ];
     }
 }

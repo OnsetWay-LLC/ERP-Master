@@ -48,35 +48,32 @@ class StoreAssetRequest extends FormRequest
                     ->where('company_id', $companyId),
             ],
 
-            'purchase_date' => [
-                'required_unless:asset_type,composite_component',
-                'nullable',
-                'date',
-            ],
+           'purchase_date' => [
+    'required_unless:asset_type,composite_component',
+    'prohibited_if:asset_type,composite_component',
+    'nullable',
+    'date',
+],
 
             'available_for_use_date' => [
                 'required',
                 'date',
             ],
 
-            'net_purchase_amount' => [
-                'required_if:asset_type,existing_asset',
-                'nullable',
-                'numeric',
-                'min:0.01',
-            ],
-
+          'net_purchase_amount' => [
+    'required_if:asset_type,existing_asset',
+    'prohibited_if:asset_type,composite_asset',
+    'prohibited_if:asset_type,composite_component',
+    'nullable',
+    'numeric',
+    'min:0.01',
+],
             'asset_quantity' => [
                 'required',
                 'integer',
                 'min:1',
             ],
 
-            'salvage_value' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
 
             'opening_accumulated_depreciation' => [
                 'nullable',
@@ -91,4 +88,5 @@ class StoreAssetRequest extends FormRequest
             ],
         ];
     }
+  
 }

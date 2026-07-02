@@ -9,10 +9,14 @@ class PurchaseInvoiceItem extends Model
     protected $fillable = [
         'purchase_invoice_id','purchase_receipt_item_id','item_id','warehouse_id',
         'item_code','item_name_ar','item_name_en',
-        'quantity','rate','amount',
+        'quantity','rate','amount','asset_item_id',
     ];
 
     public function invoice() { return $this->belongsTo(PurchaseInvoice::class, 'purchase_invoice_id'); }
     public function item() { return $this->belongsTo(Item::class); }
     public function warehouse() { return $this->belongsTo(Warehouse::class); }
+    public function assetItem()
+{
+    return $this->belongsTo(\App\Models\AssetItem::class, 'asset_item_id');
+}
 }

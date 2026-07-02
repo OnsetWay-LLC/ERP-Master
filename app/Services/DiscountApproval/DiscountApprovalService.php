@@ -3,22 +3,63 @@
 namespace App\Services\DiscountApproval;
 
 use App\Models\DiscountApprovalRequest;
+use App\Models\User;
+use App\Notifications\DiscountApprovalRequestedNotification;
 use App\Notifications\DiscountApprovalRespondedNotification;
 use App\Services\SalesInvoice\SalesInvoiceService;
+use App\Services\SalesOrder\SalesOrderService;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class DiscountApprovalService
 {
     public function __construct(
-        private readonly SalesInvoiceService $salesInvoiceService
+        private readonly SalesInvoiceService $salesInvoiceService,
+        private readonly SalesOrderService $salesOrderService
     ) {}
 
     public function pendingRequests()
     {
+        $user = auth('api')->user();
+
         return DiscountApprovalRequest::query()
-            ->with(['invoice', 'requester', 'approver'])
-            ->where('status', 'pending')
+            ->with([
+                'salesOrder',
+                'invoice',
+                'requester',
+                'approver',
+                'forwarder',
+            ])
+            ->when($user->hasRole('Accountant Chief'), function ($q) {
+                $q->whereIn('status', [
+                    'pending_department_manager_approval',
+                    'pending_department_manager_decision',
+                ]);
+            })
+              ->when($user->hasRole('Sales Officer'), function ($q) {
+                $q->whereIn('status', [
+                    'pending_department_manager_approval',
+                    'pending_department_manager_decision',
+                ]);
+            })
+            ->when($user->hasRole('CFO'), function ($q) {
+                $q->where('status', 'pending_cfo_approval');
+            })
+            ->latest()
+            ->get();
+    }
+
+    public function myRequests()
+    {
+        return DiscountApprovalRequest::query()
+            ->with([
+                'salesOrder',
+                'invoice',
+                'requester',
+                'approver',
+                'forwarder',
+            ])
+            ->where('requested_by', auth('api')->id())
             ->latest()
             ->get();
     }
@@ -27,34 +68,210 @@ class DiscountApprovalService
         DiscountApprovalRequest $approvalRequest,
         array $data
     ): DiscountApprovalRequest {
-        if ($approvalRequest->status !== 'pending') {
-            throw new RuntimeException('This discount approval request has already been responded.');
-        }
-
         return DB::transaction(function () use ($approvalRequest, $data) {
-            $approvalRequest->load(['invoice', 'requester']);
-
-            if ($data['status'] === 'approved') {
-                $this->salesInvoiceService->applyApprovedDiscount(
-                    $approvalRequest->invoice,
-                    (float) $approvalRequest->requested_discount_percentage
-                );
-            }
-
-            $approvalRequest->update([
-                'status' => $data['status'],
-                'approved_by' => auth('api')->id(),
-                'rejection_reason' => $data['status'] === 'rejected'
-                    ? ($data['rejection_reason'] ?? null)
-                    : null,
-                'responded_at' => now(),
+            $approvalRequest->load([
+                'salesOrder',
+                'invoice',
+                'requester',
             ]);
 
-            $approvalRequest->requester?->notify(
-                new DiscountApprovalRespondedNotification($approvalRequest->fresh(['invoice', 'requester', 'approver']))
+            if (in_array($approvalRequest->status, ['approved', 'rejected'], true)) {
+                throw new RuntimeException('This discount approval request has already been completed.');
+            }
+
+            return match ($data['action']) {
+                'approve' => $this->approve($approvalRequest),
+                'reject' => $this->reject($approvalRequest, $data['rejection_reason'] ?? null),
+                'forward_to_cfo' => $this->forwardToCfo($approvalRequest),
+                default => throw new RuntimeException('Invalid approval action.'),
+            };
+        });
+    }
+
+    private function approve(DiscountApprovalRequest $approvalRequest): DiscountApprovalRequest
+    {
+        $user = auth('api')->user();
+
+        if ($approvalRequest->status === 'pending_cfo_approval') {
+            if (! $user->hasRole('CFO')) {
+                throw new RuntimeException('Only CFO can approve this request.');
+            }
+        } else {
+            if (! $user->hasRole('Accountant Chief')) {
+                throw new RuntimeException('Only Department Manager can approve this request.');
+            }
+
+            if ($approvalRequest->approval_level === 'cfo') {
+                throw new RuntimeException('This request must be forwarded to CFO.');
+            }
+        }
+
+        $this->applyDiscountToLinkedDocument($approvalRequest);
+
+        $approvalRequest->update([
+            'status' => 'approved',
+            'approved_by' => $user->id,
+            'rejection_reason' => null,
+            'responded_at' => now(),
+        ]);
+
+        $approvalRequest->requester?->notify(
+            new DiscountApprovalRespondedNotification(
+                $approvalRequest->fresh([
+                    'salesOrder',
+                    'invoice',
+                    'requester',
+                    'approver',
+                    'forwarder',
+                ])
+            )
+        );
+
+        return $approvalRequest->fresh([
+            'salesOrder',
+            'invoice',
+            'requester',
+            'approver',
+            'forwarder',
+        ]);
+    }
+
+    private function reject(
+        DiscountApprovalRequest $approvalRequest,
+        ?string $reason
+    ): DiscountApprovalRequest {
+        $user = auth('api')->user();
+
+        if (! $reason) {
+            throw new RuntimeException('Rejection reason is required.');
+        }
+
+        if ($approvalRequest->status === 'pending_cfo_approval') {
+            if (! $user->hasRole('CFO')) {
+                throw new RuntimeException('Only CFO can reject this request.');
+            }
+        } else {
+            if (! $user->hasRole('Accountant Chief')) {
+                throw new RuntimeException('Only Department Manager can reject this request.');
+            }
+            else {
+                if (! $user->hasRole('Sales Officer')) {
+                throw new RuntimeException('Only Department Manager can reject this request.');
+                }
+            }
+        }
+
+        $approvalRequest->update([
+            'status' => 'rejected',
+            'approved_by' => $user->id,
+            'rejection_reason' => $reason,
+            'responded_at' => now(),
+        ]);
+
+        $approvalRequest->requester?->notify(
+            new DiscountApprovalRespondedNotification(
+                $approvalRequest->fresh([
+                    'salesOrder',
+                    'invoice',
+                    'requester',
+                    'approver',
+                    'forwarder',
+                ])
+            )
+        );
+
+        return $approvalRequest->fresh([
+            'salesOrder',
+            'invoice',
+            'requester',
+            'approver',
+            'forwarder',
+        ]);
+    }
+
+    private function forwardToCfo(
+        DiscountApprovalRequest $approvalRequest
+    ): DiscountApprovalRequest {
+        $user = auth('api')->user();
+
+        if (! $user->hasRole('Accountant Chief')) {
+            throw new RuntimeException('Only Department Manager can forward this request to CFO.');
+        }
+        if (! $user->hasRole('Sales Officer')) {
+            throw new RuntimeException('Only Department Manager can forward this request to CFO.');
+        }
+
+        if ($approvalRequest->approval_level !== 'cfo') {
+            throw new RuntimeException('This request does not require CFO approval.');
+        }
+
+        if (! in_array($approvalRequest->status, [
+            'pending_department_manager_decision',
+            'forwarded_to_cfo',
+        ], true)) {
+            throw new RuntimeException('This request cannot be forwarded to CFO.');
+        }
+
+        $approvalRequest->update([
+            'status' => 'pending_cfo_approval',
+            'forwarded_by' => $user->id,
+            'forwarded_at' => now(),
+        ]);
+
+        $cfoUsers = User::role('CFO')->get();
+
+        foreach ($cfoUsers as $cfo) {
+            $cfo->notify(
+                new DiscountApprovalRequestedNotification(
+                    $approvalRequest->fresh([
+                        'salesOrder',
+                        'invoice',
+                        'requester',
+                    ])
+                )
+            );
+        }
+
+        return $approvalRequest->fresh([
+            'salesOrder',
+            'invoice',
+            'requester',
+            'approver',
+            'forwarder',
+        ]);
+    }
+
+    private function applyDiscountToLinkedDocument(
+        DiscountApprovalRequest $approvalRequest
+    ): void {
+        $discountPercentage = (float) $approvalRequest->requested_discount_percentage;
+
+        if ($approvalRequest->sales_order_id) {
+            if (! $approvalRequest->salesOrder) {
+                throw new RuntimeException('Linked sales order was not found.');
+            }
+
+            $this->salesOrderService->applyApprovedDiscount(
+                $approvalRequest->salesOrder,
+                $discountPercentage
             );
 
-            return $approvalRequest->fresh(['invoice', 'requester', 'approver']);
-        });
+            return;
+        }
+
+        if ($approvalRequest->sales_invoice_id) {
+            if (! $approvalRequest->invoice) {
+                throw new RuntimeException('Linked sales invoice was not found.');
+            }
+
+            $this->salesInvoiceService->applyApprovedDiscount(
+                $approvalRequest->invoice,
+                $discountPercentage
+            );
+
+            return;
+        }
+
+        throw new RuntimeException('Approval request is not linked to a valid document.');
     }
 }

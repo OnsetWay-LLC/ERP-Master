@@ -27,13 +27,10 @@ class AssetRepairResource extends JsonResource
             'error_description' => $this->error_description,
             'actions_performed' => $this->actions_performed,
 
-            'repair_cost_total' => $this->repair_cost_total,
+            'repair_cost_total' => (float) $this->repair_cost_total,
             'status' => $this->status,
 
             'items' => $this->whenLoaded('items'),
-
-            'journal_entry_id' => $this->journal_entry_id,
-            'journal_entry' => $this->whenLoaded('journalEntry'),
 
             'created_by' => $this->created_by,
             'submitted_at' => $this->submitted_at?->format('Y-m-d H:i:s'),

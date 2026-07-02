@@ -284,6 +284,9 @@ Route::prefix('inventory/purchase-receipts')
     Route::put( '/purchase-invoices/{id}', [PurchaseInvoiceController::class, 'update']);
     Route::post('/purchase-invoices/{purchaseInvoice}/cancel', [PurchaseInvoiceController::class, 'cancel']);
     Route::get('/purchase-invoices/{purchaseInvoice}/pdf', [PurchaseInvoiceController::class, 'pdf']);
+    Route::post('/purchase-invoices/manual', [PurchaseInvoiceController::class, 'storeManual']);
+    Route::post('/assets-purchase-invoices', [PurchaseInvoiceController::class, 'storeManualInventory']);
+    Route::get('/lookups/items-without-stock', [PurchaseInvoiceController::class, 'itemsWithoutStock']);
 });
 Route::prefix('shifts')
     ->middleware(['auth:api', 'permission:screen.shifts,api', 'locale','audit.log'])
@@ -463,12 +466,11 @@ Route::post('sales-payments/{salesPayment}/cancel', [SalesPaymentController::cla
         Route::get('/sales-person-performance', [SalesPersonPerformanceReportController::class, 'index']);
         Route::get('/sales-person-performance/pdf', [SalesPersonPerformanceReportController::class, 'pdf']);
     });
-    Route::prefix('discount-approvals')
-        ->middleware('role:CFO')
-        ->group(function () {
-            Route::get('/', [DiscountApprovalController::class, 'index']);
-            Route::post('/{discountApprovalRequest}/respond', [DiscountApprovalController::class, 'respond']);
-        });
+    Route::prefix('discount-approvals')->group(function () {
+    Route::get('/', [DiscountApprovalController::class, 'index']);
+    Route::get('/my-requests', [DiscountApprovalController::class, 'myRequests']);
+    Route::post('/{discountApprovalRequest}/respond', [DiscountApprovalController::class, 'respond']);
+});
 });
     Route::middleware([ 'auth:api', 'permission:screen.discount_settings', 'locale','audit.log'])
     ->prefix('discount-settings')->group(function () {
@@ -584,7 +586,7 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::delete('/{assetValueAdjustment}', [AssetValueAdjustmentController::class, 'destroy']);
     });
 
-    Route::middleware(['auth:api', 'permission:screen.asset_repair', 'locale','audit.log'])
+    Route::middleware(['auth:api', 'permission:screen.asset_repairs', 'locale', 'audit.log'])
     ->prefix('asset-repairs')
     ->group(function () {
         Route::get('/lookups/assets', [AssetRepairController::class, 'availableAssets']);
@@ -595,6 +597,7 @@ Route::middleware(['auth:api', 'permission:screen.asset-capitalizations', 'local
         Route::get('/{assetRepair}', [AssetRepairController::class, 'show']);
         Route::put('/{assetRepair}', [AssetRepairController::class, 'update']);
         Route::post('/{assetRepair}/submit', [AssetRepairController::class, 'submit']);
+        Route::post('/{assetRepair}/cancel', [AssetRepairController::class, 'cancel']);
         Route::delete('/{assetRepair}', [AssetRepairController::class, 'destroy']);
     });
 

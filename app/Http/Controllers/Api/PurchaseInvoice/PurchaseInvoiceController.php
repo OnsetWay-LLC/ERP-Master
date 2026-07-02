@@ -9,6 +9,7 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseReceipt;
 use App\Services\PurchaseInvoice\PurchaseInvoiceService;
 use Illuminate\Http\Response;
+use Illuminate\Http\Request;
 use Mpdf\Mpdf;
 use NumberFormatter;
 
@@ -75,7 +76,75 @@ class PurchaseInvoiceController extends Controller
             'data' => new PurchaseInvoiceResource($invoice),
         ]);
     }
+public function storeManual(Request $request)
+{
+    $companyId = 1;
 
+    $invoice = $this->service->createManual(
+        $request->all(),
+        $companyId
+    );
+
+    return new PurchaseInvoiceResource($invoice);
+}
+
+public function storeManualInventory(Request $request)
+{
+    $data = $request->validate([
+        'supplier_id' => ['required', 'exists:suppliers,id'],
+        'posting_date' => ['nullable', 'date'],
+        'posting_time' => ['nullable'],
+        'due_date' => ['nullable', 'date'],
+        'supplier_invoice_no' => ['nullable', 'string'],
+        'supplier_invoice_date' => ['nullable', 'date'],
+
+        'additional_discount_percentage' => ['nullable', 'numeric', 'min:0'],
+        'additional_discount_amount' => ['nullable', 'numeric', 'min:0'],
+
+        'items' => ['required', 'array', 'min:1'],
+        'items.*.item_id' => ['required', 'exists:items,id'],
+        'items.*.warehouse_id' => ['nullable', 'exists:warehouses,id'],
+        'items.*.quantity' => ['required', 'numeric', 'gt:0'],
+        'items.*.rate' => ['required', 'numeric', 'gte:0'],
+
+        'tax_template_ids' => ['nullable', 'array'],
+        'fees_template_ids' => ['nullable', 'array'],
+    ]);
+
+    $invoice = app(PurchaseInvoiceService::class)
+        ->createManualInventory($data, 1);
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Manual inventory purchase invoice created successfully.',
+        'data' => $invoice,
+    ]);
+}
+public function itemsWithoutStock(Request $request)
+{
+    $companyId = 1;
+
+    $items = \App\Models\Item::query()
+        ->where('company_id', $companyId)
+        ->whereDoesntHave('warehouseStocks')
+        ->whereNull('deleted_at')
+        ->select([
+            'id',
+            'item_code',
+            'name_ar',
+            'name_en',
+            'purchase_price',
+            'selling_price',
+            'barcode',
+        ])
+        ->orderBy('id', 'desc')
+        ->get();
+
+    return response()->json([
+        'status' => true,
+        'data' => $items,
+    ]);
+}
     public function update(StorePurchaseInvoiceRequest $request, $id)
     {
         $invoice = PurchaseInvoice::findOrFail($id);

@@ -137,8 +137,8 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
                 throw new InvalidArgumentException('Target asset must be composite asset.');
             }
 
-            if ($targetAsset->status !== 'submitted') {
-                throw new InvalidArgumentException('Target asset must be submitted.');
+            if ($targetAsset->status !== 'draft') {
+                throw new InvalidArgumentException('Target asset must be draft.');
             }
 
             if ($capitalization->items->isEmpty()) {
@@ -214,22 +214,23 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         return Asset::query()
             ->where('company_id', $companyId)
             ->where('asset_type', 'composite_asset')
-            ->where('status', 'submitted')
+            ->where('status', 'draft')
             ->with(['assetItem', 'assetCategory', 'location'])
             ->latest('id')
             ->get();
     }
 
-    public function availableConsumedAssets(int $companyId, ?int $targetAssetId = null): Collection
-    {
-        return Asset::query()
-            ->where('company_id', $companyId)
-            ->where('status', 'submitted')
-            ->when($targetAssetId, fn ($q) => $q->where('id', '!=', $targetAssetId))
-            ->with(['assetItem', 'assetCategory', 'location'])
-            ->latest('id')
-            ->get();
-    }
+   public function availableConsumedAssets(int $companyId, ?int $targetAssetId = null): Collection
+{
+    return Asset::query()
+        ->where('company_id', $companyId)
+        ->where('status', 'draft')
+        ->where('asset_type', '!=', 'composite_asset')
+        ->when($targetAssetId, fn ($q) => $q->where('id', '!=', $targetAssetId))
+        ->with(['assetItem', 'assetCategory', 'location'])
+        ->latest('id')
+        ->get();
+}
 
     private function prepareItems(int $companyId, int $targetAssetId, array $items): array
     {
@@ -265,22 +266,22 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         return $result;
     }
 
-    private function getValidTargetAsset(int $companyId, int $assetId): Asset
-    {
-        $asset = Asset::query()
-            ->where('company_id', $companyId)
-            ->where('id', $assetId)
-            ->where('asset_type', 'composite_asset')
-            ->where('status', 'submitted')
-            ->with(['assetItem', 'assetCategory', 'location'])
-            ->first();
+   private function getValidTargetAsset(int $companyId, int $assetId): Asset
+{
+    $asset = Asset::query()
+        ->where('company_id', $companyId)
+        ->where('id', $assetId)
+        ->where('asset_type', 'composite_asset')
+        ->where('status', 'draft')
+        ->with(['assetItem', 'assetCategory', 'location'])
+        ->first();
 
-        if (! $asset) {
-            throw new InvalidArgumentException('Invalid submitted composite target asset selected.');
-        }
-
-        return $asset;
+    if (! $asset) {
+        throw new InvalidArgumentException('Invalid draft composite target asset selected.');
     }
+
+    return $asset;
+}
 
     private function getValidConsumedAsset(int $companyId, int $assetId): Asset
     {

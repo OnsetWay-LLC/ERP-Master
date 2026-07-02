@@ -22,7 +22,6 @@ class Asset extends Model
     'net_purchase_amount',
     'available_for_use_date',
     'asset_quantity',
-    'salvage_value',
     'purchase_receipt_id',
     'purchase_invoice_id',
     'opening_accumulated_depreciation',
@@ -55,7 +54,10 @@ class Asset extends Model
     {
         return $this->belongsTo(AssetCategory::class);
     }
-
+public function journalEntries()
+{
+    return $this->hasMany(\App\Models\JournalEntry::class, 'asset_id');
+}
     public function location()
     {
         return $this->belongsTo(AssetLocation::class, 'location_id');
@@ -73,5 +75,10 @@ class Asset extends Model
 public function consumedAssets()
 {
     return $this->hasMany(Asset::class, 'capitalized_to_asset_id');
+}
+
+public function depreciationSchedules()
+{
+    return $this->hasMany(AssetDepreciationSchedule::class);
 }
 }

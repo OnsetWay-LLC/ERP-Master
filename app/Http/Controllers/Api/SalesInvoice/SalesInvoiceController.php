@@ -24,6 +24,8 @@ class SalesInvoiceController extends Controller
 
     public function store(StoreSalesInvoiceRequest $request): JsonResponse
     {
+       
+
         $invoice = $this->service->create($request->validated());
         $invoice->load('pendingDiscountApproval');
 

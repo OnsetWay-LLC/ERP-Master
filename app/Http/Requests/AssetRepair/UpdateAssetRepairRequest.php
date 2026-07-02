@@ -38,22 +38,17 @@ class UpdateAssetRepairRequest extends FormRequest
             'error_description' => ['nullable', 'string'],
             'actions_performed' => ['nullable', 'string'],
 
-            'items' => ['sometimes', 'required', 'array'],
+          'items' => ['sometimes', 'array'],
 
-            'items.*.purchase_invoice_id' => [
-                'required_with:items',
-                'integer',
-                'distinct',
-                Rule::exists('purchase_invoices', 'id')
-                    ->where('company_id', $companyId)
-                    ->where('status', 'submitted'),
-            ],
+'items.*.purchase_invoice_id' => [
+    'required_with:items',
+    'integer',
+    'distinct',
+    Rule::exists('purchase_invoices', 'id')
+        ->where('company_id', $companyId)
+        ->where('status', 'submitted'),
+],
 
-            'items.*.repair_cost' => [
-                'required_with:items',
-                'numeric',
-                'min:0.01',
-            ],
         ];
     }
 }

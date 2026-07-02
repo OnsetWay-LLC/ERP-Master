@@ -8,7 +8,7 @@ class PurchaseInvoice extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'company_id','purchase_receipt_id','purchase_order_id','supplier_id',
+        'company_id','purchase_receipt_id','purchase_order_id',   'invoice_type','supplier_id',
         'invoice_number','posting_date','posting_time','due_date',
         'supplier_invoice_no','supplier_invoice_date',
         'posting_method','payment_mode',

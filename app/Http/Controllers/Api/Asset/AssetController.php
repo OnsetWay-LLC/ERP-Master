@@ -85,18 +85,22 @@ public function submit(Asset $asset): JsonResponse
     }
 }
     public function show(int $id): JsonResponse
-    {
-        $asset = Asset::query()
-            ->where('company_id', $this->companyId())
-            ->with(['assetItem', 'assetCategory', 'location'])
-            ->findOrFail($id);
+{
+    $asset = Asset::query()
+        ->where('company_id', $this->companyId())
+        ->with([
+            'assetItem',
+            'assetCategory',
+            'location',
+            'depreciationSchedules',
+        ])
+        ->findOrFail($id);
 
-        return response()->json([
-            'status' => true,
-            'data' => new AssetResource($asset),
-        ]);
-    }
-
+    return response()->json([
+        'status' => true,
+        'data' => new AssetResource($asset),
+    ]);
+}
     public function update(UpdateAssetRequest $request, int $id): JsonResponse
     {
         $asset = Asset::query()

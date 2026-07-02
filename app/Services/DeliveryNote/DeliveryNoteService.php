@@ -55,7 +55,29 @@ class DeliveryNoteService
             }
 
             $salesOrder = $pickList->salesOrder;
+$pendingApproval = $salesOrder->discountApprovalRequests()
+    ->whereIn('status', [
+        'pending_department_manager_approval',
+        'pending_department_manager_decision',
+        'pending_cfo_approval',
+    ])
+    ->exists();
 
+if ($pendingApproval) {
+    throw new RuntimeException(
+        'Cannot create delivery note while discount approval is pending.'
+    );
+}
+
+$rejectedApproval = $salesOrder->discountApprovalRequests()
+    ->where('status', 'rejected')
+    ->exists();
+
+if ($rejectedApproval) {
+    throw new RuntimeException(
+        'Cannot create delivery note because the discount request was rejected.'
+    );
+}
             if ($salesOrder->status !== 'delivery_and_to_bill') {
                 throw new RuntimeException('Sales order is not ready for delivery.');
             }

@@ -53,14 +53,14 @@ if ($outstanding <= 0 && (float) $invoice->paid_amount <= 0) {
                 'posting_time' => $data['posting_time'],
                 'payment_due_date' => $data['payment_due_date'] ?? null,
                 'return_reason' => $data['return_reason'] ?? null,
-                'posting_method' => $data['posting_method'],
+                'posting_method' => $invoice->posting_method,
                 'sales_account_id' => $accounts['sales_account_id'],
                 'customer_account_id' => $accounts['customer_account_id'],
                 'net_total' => $totals['net_total'],
                 'tax_total' => $totals['tax_total'],
                 'fees_total' => $totals['fees_total'],
-                'discount_apply_on' => $data['discount_apply_on'] ?? 'grand_total',
-                'discount_percentage' => $data['discount_percentage'] ?? 0,
+'discount_apply_on' => 'item_total',
+'discount_percentage' => $data['discount_percentage'] ?? 0,
                 'discount_amount' => $totals['discount_amount'],
                 'grand_total' => $totals['grand_total'],
                 
@@ -121,14 +121,14 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
             'posting_time' => $data['posting_time'],
             'payment_due_date' => $data['payment_due_date'] ?? null,
             'return_reason' => $data['return_reason'] ?? null,
-            'posting_method' => $data['posting_method'],
+            'posting_method' => $invoice->posting_method,
             'sales_account_id' => $accounts['sales_account_id'],
             'customer_account_id' => $accounts['customer_account_id'],
             'net_total' => $totals['net_total'],
             'tax_total' => $totals['tax_total'],
             'fees_total' => $totals['fees_total'],
-            'discount_apply_on' => $data['discount_apply_on'] ?? 'grand_total',
-            'discount_percentage' => $data['discount_percentage'] ?? 0,
+'discount_apply_on' => 'item_total',
+'discount_percentage' => $data['discount_percentage'] ?? 0,
             'discount_amount' => $totals['discount_amount'],
             'grand_total' => $totals['grand_total'],
             'outstanding_amount' => $outstanding,
@@ -247,16 +247,18 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
 private function createReverseJournalEntry(SalesReturn $salesReturn): JournalEntry
 {
     $settings = CompanyAccountSetting::where('company_id', $salesReturn->company_id)->first();
-app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $salesReturn->company_id,
-        $salesReturn->posting_date,
-        'update'
-    );
+
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $salesReturn->company_id,
+            $salesReturn->posting_date,
+            'update'
+        );
+
     $journalEntry = JournalEntry::create([
         'company_id' => $salesReturn->company_id,
         'entry_number' => $this->generateJournalEntryNumber($salesReturn->company_id),
-       'entry_date' => $salesReturn->posting_date,
+        'entry_date' => $salesReturn->posting_date,
         'total_debit' => 0,
         'total_credit' => 0,
         'description' => 'Reverse Sales Return - ' . $salesReturn->return_number,
@@ -267,63 +269,70 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
     $totalDebit = 0;
     $totalCredit = 0;
 
+    $grandTotal = abs((float) $salesReturn->grand_total);
+    $netTotal = abs((float) $salesReturn->net_total);
+
     $journalEntry->lines()->create([
         'company_id' => $salesReturn->company_id,
         'account_id' => $salesReturn->customer_account_id,
-        'debit' => $salesReturn->grand_total,
+        'debit' => $grandTotal,
         'credit' => 0,
         'note' => 'Reverse customer receivable reduction',
     ]);
-    $totalDebit += $salesReturn->grand_total;
+    $totalDebit += $grandTotal;
 
     $journalEntry->lines()->create([
         'company_id' => $salesReturn->company_id,
         'account_id' => $salesReturn->sales_account_id,
         'debit' => 0,
-        'credit' => $salesReturn->net_total,
+        'credit' => $netTotal,
         'note' => 'Reverse sales return revenue',
     ]);
-    $totalCredit += $salesReturn->net_total;
+    $totalCredit += $netTotal;
 
     foreach ($salesReturn->taxes as $tax) {
+        $amount = abs((float) $tax->amount);
+
+        if ($amount <= 0) {
+            continue;
+        }
+
         $journalEntry->lines()->create([
             'company_id' => $salesReturn->company_id,
             'account_id' => $tax->account_id,
             'debit' => 0,
-            'credit' => $tax->amount,
+            'credit' => $amount,
             'note' => 'Reverse sales return tax',
         ]);
-        $totalCredit += $tax->amount;
+
+        $totalCredit += $amount;
     }
 
     foreach ($salesReturn->fees as $fee) {
+        $amount = abs((float) $fee->amount);
+
+        if ($amount <= 0) {
+            continue;
+        }
+
         $journalEntry->lines()->create([
             'company_id' => $salesReturn->company_id,
             'account_id' => $fee->account_id,
             'debit' => 0,
-            'credit' => $fee->amount,
+            'credit' => $amount,
             'note' => 'Reverse sales return fee',
         ]);
-        $totalCredit += $fee->amount;
+
+        $totalCredit += $amount;
     }
 
-    if ((float) $salesReturn->discount_amount > 0) {
-        $discountAccountId = $settings?->default_payment_discount_account_id;
-
-        $journalEntry->lines()->create([
-            'company_id' => $salesReturn->company_id,
-            'account_id' => $discountAccountId,
-            'debit' => $salesReturn->discount_amount,
-            'credit' => 0,
-            'note' => 'Reverse sales return discount',
-        ]);
-
-        $totalDebit += $salesReturn->discount_amount;
-    }
-
-    $cost = $this->calculateReturnedCost($salesReturn);
+    $cost = abs((float) $this->calculateReturnedCost($salesReturn));
 
     if ($cost > 0) {
+        if (! $settings?->default_cogs_account_id || ! $settings?->default_inventory_account_id) {
+            throw new RuntimeException('COGS or Inventory account is not configured.');
+        }
+
         $journalEntry->lines()->create([
             'company_id' => $salesReturn->company_id,
             'account_id' => $settings->default_cogs_account_id,
@@ -344,8 +353,13 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         $totalCredit += $cost;
     }
 
-    if (round($totalDebit, 2) !== round($totalCredit, 2)) {
-        throw new RuntimeException('Reverse journal entry is not balanced.');
+    $totalDebit = round($totalDebit, 2);
+    $totalCredit = round($totalCredit, 2);
+
+    if ($totalDebit !== $totalCredit) {
+        throw new RuntimeException(
+            'Reverse journal entry is not balanced. Debit=' . $totalDebit . ', Credit=' . $totalCredit
+        );
     }
 
     $journalEntry->update([
@@ -430,26 +444,30 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
 }
     private function calculateTotals(int $companyId, array $data): array
 {
-    $baseAmount = 0;
+    $itemTotal = 0;
 
     foreach ($data['items'] as $row) {
         $invoiceItem = SalesInvoiceItem::findOrFail($row['sales_invoice_item_id']);
 
         if ((float) $row['returned_qty'] > (float) $invoiceItem->quantity) {
-            throw new RuntimeException(
-                'Returned quantity cannot exceed original invoice quantity.'
-            );
+            throw new RuntimeException('Returned quantity cannot exceed original invoice quantity.');
         }
 
-        $baseAmount += (float) $row['returned_qty'] * (float) $invoiceItem->rate;
+        $itemTotal += (float) $row['returned_qty'] * (float) $invoiceItem->rate;
     }
 
-    $netTotal = $baseAmount;
+    $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
+
+    $discountAmount = round($itemTotal * ($discountPercentage / 100), 2);
+
+    $netTotal = round($itemTotal - $discountAmount, 2);
 
     $taxTotal = 0;
 
     foreach (($data['tax_template_ids'] ?? []) as $taxTemplateId) {
-        $template = TaxTemplate::with('lines')->findOrFail($taxTemplateId);
+        $template = TaxTemplate::with('lines')
+            ->where('company_id', $companyId)
+            ->findOrFail($taxTemplateId);
 
         foreach ($template->lines as $line) {
             $taxTotal += $line->type === 'on_net_total'
@@ -458,33 +476,30 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         }
     }
 
+    $taxTotal = round($taxTotal, 2);
+
     $feesTotal = 0;
 
     foreach (($data['fees_template_ids'] ?? []) as $feesTemplateId) {
-        $template = FeesTemplate::findOrFail($feesTemplateId);
+        $template = FeesTemplate::where('company_id', $companyId)
+            ->findOrFail($feesTemplateId);
 
         $feesTotal += $template->type === 'percentage'
-            ? $baseAmount * ((float) $template->fees_rate / 100)
+            ? $netTotal * ((float) $template->fees_rate / 100)
             : (float) ($template->amount ?? 0);
     }
 
-    $discountPercentage = (float) ($data['discount_percentage'] ?? 0);
-    $discountApplyOn = $data['discount_apply_on'] ?? 'grand_total';
+    $feesTotal = round($feesTotal, 2);
 
-    $base = $discountApplyOn === 'net_total'
-        ? $netTotal
-        : ($netTotal + $taxTotal + $feesTotal);
-
-    $discountAmount = $base * ($discountPercentage / 100);
-
-    $grandTotal = ($netTotal + $taxTotal + $feesTotal) - $discountAmount;
+    $grandTotal = round($netTotal + $taxTotal + $feesTotal, 2);
 
     return [
-        'net_total' => $netTotal,
-        'tax_total' => $taxTotal,
-        'fees_total' => $feesTotal,
-        'discount_amount' => $discountAmount,
-        'grand_total' => $grandTotal,
+        'item_total' => round($itemTotal * -1, 2),
+        'net_total' => round($netTotal * -1, 2),
+        'tax_total' => round($taxTotal * -1, 2),
+        'fees_total' => round($feesTotal * -1, 2),
+        'discount_amount' => round($discountAmount * -1, 2),
+        'grand_total' => round($grandTotal * -1, 2),
     ];
 }
     private function saveItems(SalesReturn $salesReturn, array $items): void
@@ -502,7 +517,7 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
                 'original_qty' => $invoiceItem->quantity,
                 'returned_qty' => $row['returned_qty'],
                 'rate' => $invoiceItem->rate,
-                'amount' => (float) $row['returned_qty'] * (float) $invoiceItem->rate,
+                'amount' => round(((float) $row['returned_qty'] * (float) $invoiceItem->rate) * -1, 2),
             ]);
         }
     }
@@ -537,16 +552,13 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
     int $companyId,
     array $ids,
     float $netTotal
-): void
-{
-    $baseAmount = $salesReturn->items->sum('amount');
-
+): void {
     foreach ($ids as $id) {
         $template = FeesTemplate::where('company_id', $companyId)
             ->findOrFail($id);
 
         $amount = $template->type === 'percentage'
-            ? $baseAmount * ((float) $template->fees_rate / 100)
+            ? $netTotal * ((float) $template->fees_rate / 100)
             : (float) ($template->amount ?? 0);
 
         $salesReturn->fees()->create([
@@ -555,11 +567,10 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
             'type' => $template->type,
             'account_id' => $template->account_id,
             'fees_rate' => $template->fees_rate,
-            'amount' => $amount,
+            'amount' => round($amount * -1, 2),
         ]);
     }
-}
-    private function increaseStock(SalesReturn $salesReturn): void
+}    private function increaseStock(SalesReturn $salesReturn): void
     {
         foreach ($salesReturn->items as $item) {
             $stock = WarehouseStock::firstOrCreate(
@@ -586,118 +597,126 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         }
     }
 
-    private function createJournalEntry(SalesReturn $salesReturn): JournalEntry
-    {
-        $settings = CompanyAccountSetting::where('company_id', $salesReturn->company_id)->first();
-app(\App\Services\FinancialYear\FinancialYearService::class)
-    ->validateTransactionDate(
-        $salesReturn->company_id,
-        $salesReturn->posting_date,
-        'create'
-    );
-        $journalEntry = JournalEntry::create([
-            'company_id' => $salesReturn->company_id,
-            'entry_number' => $this->generateJournalEntryNumber($salesReturn->company_id),
-            'entry_date' => $salesReturn->posting_date,
-            'total_debit' => 0,
-            'total_credit' => 0,
-            'description' => 'Sales Return - ' . $salesReturn->return_number,
-            'status' => 'posted',
-            'created_by' => auth('api')->id(),
-        ]);
+  private function createJournalEntry(SalesReturn $salesReturn): JournalEntry
+{
+    $settings = CompanyAccountSetting::where('company_id', $salesReturn->company_id)->first();
 
-        $totalDebit = 0;
-        $totalCredit = 0;
+    app(\App\Services\FinancialYear\FinancialYearService::class)
+        ->validateTransactionDate(
+            $salesReturn->company_id,
+            $salesReturn->posting_date,
+            'create'
+        );
 
-        $journalEntry->lines()->create([
-            'company_id' => $salesReturn->company_id,
-            'account_id' => $salesReturn->sales_account_id,
-            'debit' => $salesReturn->net_total,
-            'credit' => 0,
-            'note' => 'Sales return revenue reversal',
-        ]);
-        $totalDebit += $salesReturn->net_total;
+    $journalEntry = JournalEntry::create([
+        'company_id'   => $salesReturn->company_id,
+        'entry_number' => $this->generateJournalEntryNumber($salesReturn->company_id),
+        'entry_date'   => $salesReturn->posting_date,
+        'total_debit'  => 0,
+        'total_credit' => 0,
+        'description'  => 'Sales Return - ' . $salesReturn->return_number,
+        'status'       => 'posted',
+        'created_by'   => auth('api')->id(),
+    ]);
 
-        foreach ($salesReturn->taxes as $tax) {
-            $journalEntry->lines()->create([
-                'company_id' => $salesReturn->company_id,
-                'account_id' => $tax->account_id,
-                'debit' => $tax->amount,
-                'credit' => 0,
-                'note' => 'Sales return tax reversal',
-            ]);
-            $totalDebit += $tax->amount;
-        }
+    $totalDebit = 0;
+    $totalCredit = 0;
 
-        foreach ($salesReturn->fees as $fee) {
-            $journalEntry->lines()->create([
-                'company_id' => $salesReturn->company_id,
-                'account_id' => $fee->account_id,
-                'debit' => $fee->amount,
-                'credit' => 0,
-                'note' => 'Sales return fee reversal',
-            ]);
-            $totalDebit += $fee->amount;
-        }
+    // Reverse Sales
+    $journalEntry->lines()->create([
+        'company_id' => $salesReturn->company_id,
+        'account_id' => $salesReturn->sales_account_id,
+        'debit'      => abs($salesReturn->net_total),
+        'credit'     => 0,
+        'note'       => 'Sales return revenue reversal',
+    ]);
 
-        if ((float) $salesReturn->discount_amount > 0) {
-            $discountAccountId = $settings?->default_payment_discount_account_id;
+    $totalDebit += abs($salesReturn->net_total);
 
-            $journalEntry->lines()->create([
-                'company_id' => $salesReturn->company_id,
-                'account_id' => $discountAccountId,
-                'debit' => 0,
-                'credit' => $salesReturn->discount_amount,
-                'note' => 'Reverse sales discount',
-            ]);
+    // Taxes
+    foreach ($salesReturn->taxes as $tax) {
 
-            $totalCredit += $salesReturn->discount_amount;
-        }
+        $amount = abs($tax->amount);
 
         $journalEntry->lines()->create([
             'company_id' => $salesReturn->company_id,
-            'account_id' => $salesReturn->customer_account_id,
-            'debit' => 0,
-            'credit' => $salesReturn->grand_total,
-            'note' => 'Reduce customer receivable',
-        ]);
-        $totalCredit += $salesReturn->grand_total;
-
-        $cost = $this->calculateReturnedCost($salesReturn);
-
-        if ($cost > 0) {
-            $journalEntry->lines()->create([
-                'company_id' => $salesReturn->company_id,
-                'account_id' => $settings->default_inventory_account_id,
-                'debit' => $cost,
-                'credit' => 0,
-                'note' => 'Returned stock',
-            ]);
-
-            $journalEntry->lines()->create([
-                'company_id' => $salesReturn->company_id,
-                'account_id' => $settings->default_cogs_account_id,
-                'debit' => 0,
-                'credit' => $cost,
-                'note' => 'Reverse COGS',
-            ]);
-
-            $totalDebit += $cost;
-            $totalCredit += $cost;
-        }
-
-        if (round($totalDebit, 2) !== round($totalCredit, 2)) {
-            throw new RuntimeException('Journal entry is not balanced.');
-        }
-
-        $journalEntry->update([
-            'total_debit' => $totalDebit,
-            'total_credit' => $totalCredit,
+            'account_id' => $tax->account_id,
+            'debit'      => $amount,
+            'credit'     => 0,
+            'note'       => 'Sales return tax reversal',
         ]);
 
-        return $journalEntry;
+        $totalDebit += $amount;
     }
 
+    // Fees
+    foreach ($salesReturn->fees as $fee) {
+
+        $amount = abs($fee->amount);
+
+        $journalEntry->lines()->create([
+            'company_id' => $salesReturn->company_id,
+            'account_id' => $fee->account_id,
+            'debit'      => $amount,
+            'credit'     => 0,
+            'note'       => 'Sales return fee reversal',
+        ]);
+
+        $totalDebit += $amount;
+    }
+
+    // Customer
+    $journalEntry->lines()->create([
+        'company_id' => $salesReturn->company_id,
+        'account_id' => $salesReturn->customer_account_id,
+        'debit'      => 0,
+        'credit'     => abs($salesReturn->grand_total),
+        'note'       => 'Reduce customer receivable',
+    ]);
+
+    $totalCredit += abs($salesReturn->grand_total);
+
+    // Inventory / COGS
+    $cost = abs($this->calculateReturnedCost($salesReturn));
+
+    if ($cost > 0) {
+
+        $journalEntry->lines()->create([
+            'company_id' => $salesReturn->company_id,
+            'account_id' => $settings->default_inventory_account_id,
+            'debit'      => $cost,
+            'credit'     => 0,
+            'note'       => 'Returned stock',
+        ]);
+
+        $journalEntry->lines()->create([
+            'company_id' => $salesReturn->company_id,
+            'account_id' => $settings->default_cogs_account_id,
+            'debit'      => 0,
+            'credit'     => $cost,
+            'note'       => 'Reverse COGS',
+        ]);
+
+        $totalDebit += $cost;
+        $totalCredit += $cost;
+    }
+
+    $totalDebit = round($totalDebit, 2);
+    $totalCredit = round($totalCredit, 2);
+
+    if ($totalDebit != $totalCredit) {
+        throw new RuntimeException(
+            "Journal entry is not balanced. Debit={$totalDebit}, Credit={$totalCredit}"
+        );
+    }
+
+    $journalEntry->update([
+        'total_debit' => $totalDebit,
+        'total_credit' => $totalCredit,
+    ]);
+
+    return $journalEntry;
+}
     private function calculateReturnedCost(SalesReturn $salesReturn): float
     {
         $cost = 0;
@@ -714,21 +733,23 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         return $cost;
     }
 
-    private function resolveAccounts(int $companyId, array $data, SalesInvoice $invoice): array
-    {
-        if ($data['posting_method'] === 'manual') {
-            return [
-                'sales_account_id' => $data['sales_account_id'],
-                'customer_account_id' => $data['customer_account_id'],
-            ];
-        }
-
-        return [
-            'sales_account_id' => $invoice->sales_account_id,
-            'customer_account_id' => $invoice->receivable_account_id,
-        ];
+ private function resolveAccounts(
+    int $companyId,
+    array $data,
+    SalesInvoice $invoice
+): array {
+    if (
+        empty($invoice->sales_account_id) ||
+        empty($invoice->receivable_account_id)
+    ) {
+        throw new RuntimeException('Posting accounts are missing on the original sales invoice.');
     }
 
+    return [
+        'sales_account_id' => $invoice->sales_account_id,
+        'customer_account_id' => $invoice->receivable_account_id,
+    ];
+}
     private function paymentStatus(float $outstanding): string
     {
         if ($outstanding <= 0) {
@@ -745,10 +766,30 @@ app(\App\Services\FinancialYear\FinancialYearService::class)
         return 'SR-' . now()->format('Y') . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
     }
 
-    private function generateJournalEntryNumber(int $companyId): string
-    {
-        $count = JournalEntry::where('company_id', $companyId)->count() + 1;
+   private function generateJournalEntryNumber(int $companyId): string
+{
+    $lastEntry = JournalEntry::where('company_id', $companyId)
+        ->orderByDesc('id')
+        ->lockForUpdate()
+        ->first();
 
-        return 'JV-' . now()->format('Y') . '-' . str_pad($count, 5, '0', STR_PAD_LEFT);
+    $next = 1;
+
+    if ($lastEntry) {
+        preg_match('/(\d+)$/', $lastEntry->entry_number, $matches);
+        $next = isset($matches[1]) ? ((int)$matches[1]) + 1 : 1;
     }
+
+    do {
+        $number = 'JV-' . now()->year . '-' . str_pad($next, 5, '0', STR_PAD_LEFT);
+
+        $exists = JournalEntry::where('company_id', $companyId)
+            ->where('entry_number', $number)
+            ->exists();
+
+        $next++;
+    } while ($exists);
+
+    return $number;
+}
 }

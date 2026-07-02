@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\AssetCategory;
 
+use App\Constants\AccountTypes;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -53,21 +54,85 @@ class UpdateAssetCategoryRequest extends FormRequest
                 ]),
             ],
 
-            'frequency_month' => ['nullable', 'integer', 'min:1', 'max:12'],
-            'total_depreciation_count' => ['nullable', 'integer', 'min:1'],
-            'depreciation_posting_day' => ['nullable', 'integer', 'min:1', 'max:31'],
+            'frequency_month' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:12',
+            ],
 
-            'depreciation_rate' => ['nullable', 'numeric', 'min:0.01', 'max:100'],
+            'total_depreciation_count' => [
+                'nullable',
+                'integer',
+                'min:1',
+            ],
 
-            'fixed_asset_account_id' => ['sometimes', 'required', 'integer', 'exists:chart_of_accounts,id'],
-            'accumulated_depreciation_account_id' => ['sometimes', 'required', 'integer', 'exists:chart_of_accounts,id'],
-            'depreciation_expense_account_id' => ['sometimes', 'required', 'integer', 'exists:chart_of_accounts,id'],
-'capital_work_in_progress_account_id' => [
-    'sometimes',    'required',
-    'integer',  'exists:chart_of_accounts,id',  
-],
+            'depreciation_posting_day' => [
+                'nullable',
+                'integer',
+                'min:1',
+                'max:31',
+            ],
 
-            'is_active' => ['nullable', 'boolean'],
+            'depreciation_rate' => [
+                'nullable',
+                'numeric',
+                'min:0.01',
+                'max:100',
+            ],
+
+            'fixed_asset_account_id' => [
+                'sometimes',
+                'required',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::FIXED_ASSET)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'accumulated_depreciation_account_id' => [
+                'sometimes',
+                'required',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::ACCUMULATED_DEPRECIATION)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'depreciation_expense_account_id' => [
+                'sometimes',
+                'required',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::DEPRECIATION)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'capital_work_in_progress_account_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                Rule::exists('chart_of_accounts', 'id')
+                    ->where('company_id', $companyId)
+                    ->where('account_type', AccountTypes::CAPITAL_WORK_IN_PROGRESS)
+                    ->where('account_level', 'child')
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at'),
+            ],
+
+            'is_active' => [
+                'nullable',
+                'boolean',
+            ],
         ];
     }
 }
