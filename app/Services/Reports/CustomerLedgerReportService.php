@@ -43,7 +43,7 @@ class CustomerLedgerReportService
                 $openingBalance
                 + $invoiceAmount
                 - $paidAmount
-                - $creditNote;
+                + $creditNote;
 
             return [
                 'customer_id' => $customer->id,

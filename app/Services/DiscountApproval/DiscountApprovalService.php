@@ -31,16 +31,7 @@ class DiscountApprovalService
                 'forwarder',
             ])
             ->when($user->hasRole('Accountant Chief'), function ($q) {
-                $q->whereIn('status', [
-                    'pending_department_manager_approval',
-                    'pending_department_manager_decision',
-                ]);
-            })
-              ->when($user->hasRole('Sales Officer'), function ($q) {
-                $q->whereIn('status', [
-                    'pending_department_manager_approval',
-                    'pending_department_manager_decision',
-                ]);
+                $q->where('status', 'pending_department_manager_approval');
             })
             ->when($user->hasRole('CFO'), function ($q) {
                 $q->where('status', 'pending_cfo_approval');
@@ -92,18 +83,20 @@ class DiscountApprovalService
     {
         $user = auth('api')->user();
 
-        if ($approvalRequest->status === 'pending_cfo_approval') {
+        if ($approvalRequest->status === 'pending_department_manager_approval') {
+            if (! $user->hasRole('Accountant Chief')) {
+                throw new RuntimeException('Only Accountant Chief can approve this request.');
+            }
+
+            if ($approvalRequest->approval_level === 'cfo') {
+                throw new RuntimeException('This request exceeds your approval limit. Please forward it to CFO.');
+            }
+        } elseif ($approvalRequest->status === 'pending_cfo_approval') {
             if (! $user->hasRole('CFO')) {
                 throw new RuntimeException('Only CFO can approve this request.');
             }
         } else {
-            if (! $user->hasRole('Accountant Chief')) {
-                throw new RuntimeException('Only Department Manager can approve this request.');
-            }
-
-            if ($approvalRequest->approval_level === 'cfo') {
-                throw new RuntimeException('This request must be forwarded to CFO.');
-            }
+            throw new RuntimeException('This request cannot be approved.');
         }
 
         $this->applyDiscountToLinkedDocument($approvalRequest);
@@ -146,19 +139,16 @@ class DiscountApprovalService
             throw new RuntimeException('Rejection reason is required.');
         }
 
-        if ($approvalRequest->status === 'pending_cfo_approval') {
+        if ($approvalRequest->status === 'pending_department_manager_approval') {
+            if (! $user->hasRole('Accountant Chief')) {
+                throw new RuntimeException('Only Accountant Chief can reject this request.');
+            }
+        } elseif ($approvalRequest->status === 'pending_cfo_approval') {
             if (! $user->hasRole('CFO')) {
                 throw new RuntimeException('Only CFO can reject this request.');
             }
         } else {
-            if (! $user->hasRole('Accountant Chief')) {
-                throw new RuntimeException('Only Department Manager can reject this request.');
-            }
-            else {
-                if (! $user->hasRole('Sales Officer')) {
-                throw new RuntimeException('Only Department Manager can reject this request.');
-                }
-            }
+            throw new RuntimeException('This request cannot be rejected.');
         }
 
         $approvalRequest->update([
@@ -195,21 +185,15 @@ class DiscountApprovalService
         $user = auth('api')->user();
 
         if (! $user->hasRole('Accountant Chief')) {
-            throw new RuntimeException('Only Department Manager can forward this request to CFO.');
+            throw new RuntimeException('Only Accountant Chief can forward this request to CFO.');
         }
-        if (! $user->hasRole('Sales Officer')) {
-            throw new RuntimeException('Only Department Manager can forward this request to CFO.');
+
+        if ($approvalRequest->status !== 'pending_department_manager_approval') {
+            throw new RuntimeException('This request cannot be forwarded to CFO.');
         }
 
         if ($approvalRequest->approval_level !== 'cfo') {
             throw new RuntimeException('This request does not require CFO approval.');
-        }
-
-        if (! in_array($approvalRequest->status, [
-            'pending_department_manager_decision',
-            'forwarded_to_cfo',
-        ], true)) {
-            throw new RuntimeException('This request cannot be forwarded to CFO.');
         }
 
         $approvalRequest->update([
@@ -218,17 +202,16 @@ class DiscountApprovalService
             'forwarded_at' => now(),
         ]);
 
-        $cfoUsers = User::role('CFO')->get();
+        $freshApprovalRequest = $approvalRequest->fresh([
+            'salesOrder',
+            'invoice',
+            'requester',
+            'forwarder',
+        ]);
 
-        foreach ($cfoUsers as $cfo) {
+        foreach (User::role('CFO')->get() as $cfo) {
             $cfo->notify(
-                new DiscountApprovalRequestedNotification(
-                    $approvalRequest->fresh([
-                        'salesOrder',
-                        'invoice',
-                        'requester',
-                    ])
-                )
+                new DiscountApprovalRequestedNotification($freshApprovalRequest)
             );
         }
 

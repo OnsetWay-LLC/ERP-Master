@@ -39,7 +39,10 @@ class AccountsReceivableReportService
                     'invoice_amount' => (float) $invoice->grand_total,
                     'paid_amount' => (float) $invoice->paid_amount,
                     'credit_note' => (float) $invoice->credit_note_amount,
-                    'outstanding' => (float) $invoice->outstanding_amount,
+                    'outstanding' => round(
+                         (float) $invoice->grand_total
+                          - (float) $invoice->paid_amount
+                           - abs((float) $invoice->credit_note_amount), 2),
                 ];
             })
             ->values();

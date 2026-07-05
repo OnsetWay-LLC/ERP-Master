@@ -21,14 +21,24 @@ class DiscountApprovalRequestedNotification extends Notification
 
    public function toArray(object $notifiable): array
 {
-    $this->approvalRequest->loadMissing(['invoice', 'salesOrder', 'requester']);
+    $this->approvalRequest->loadMissing([
+        'invoice',
+        'salesOrder',
+        'requester',
+    ]);
 
-    $documentType = $this->approvalRequest->sales_order_id ? 'sales_order' : 'sales_invoice';
+    $documentType = $this->approvalRequest->sales_order_id
+        ? 'sales_order'
+        : 'sales_invoice';
+
+    $requesterName = $this->approvalRequest->requester?->name ?? 'Unknown User';
 
     return [
         'type' => 'discount_approval_requested',
-        'title' => 'Discount approval required',
-        'message' => 'A discount approval request has been submitted.',
+
+        'title' => 'Discount Approval Required',
+
+        'message' => "{$requesterName} requested approval for a discount.",
 
         'approval_request_id' => $this->approvalRequest->id,
 
@@ -41,13 +51,14 @@ class DiscountApprovalRequestedNotification extends Notification
             : $this->approvalRequest->invoice?->invoice_number,
 
         'requested_by_id' => $this->approvalRequest->requested_by,
-        'requested_by_name' => $this->approvalRequest->requester?->name,
+        'requested_by_name' => $requesterName,
 
         'requested_discount_percentage' => (float) $this->approvalRequest->requested_discount_percentage,
         'allowed_discount_percentage' => (float) $this->approvalRequest->allowed_discount_percentage,
 
         'approval_level' => $this->approvalRequest->approval_level,
         'status' => $this->approvalRequest->status,
+
         'created_at' => $this->approvalRequest->created_at?->toDateTimeString(),
     ];
 }

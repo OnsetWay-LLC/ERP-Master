@@ -20,6 +20,7 @@ class ItemWiseSalesRegisterReportService
                 'invoice.receivableAccount',
                 'invoice.salesAccount',
                 'invoice.salesOrder',
+                'invoice.items',
                 'item.itemGroup',
             ])
             ->whereHas('invoice', function ($q) use ($fromDate, $toDate, $customerId) {
@@ -44,9 +45,21 @@ class ItemWiseSalesRegisterReportService
                 $locale = app()->getLocale();
 
                 $taxRate = $this->getInvoiceTaxRate((int) $invoice->id);
+
                 $amount = (float) $line->amount;
-                $vatAmount = $amount * ($taxRate / 100);
-                $total = $amount + $vatAmount;
+
+                $invoiceItemsTotal = (float) $invoice->items->sum('amount');
+                $invoiceDiscount = (float) $invoice->discount_amount;
+
+                $itemDiscount = $invoiceItemsTotal > 0
+                    ? ($amount / $invoiceItemsTotal) * $invoiceDiscount
+                    : 0;
+
+                $netTotal = $amount - $itemDiscount;
+
+                $vatAmount = $netTotal * ($taxRate / 100);
+
+                $total = $netTotal + $vatAmount;
 
                 return [
                     'item_code' => $line->item_code,
@@ -77,12 +90,16 @@ class ItemWiseSalesRegisterReportService
                         ? ($invoice?->salesAccount?->name_ar ?? $invoice?->salesAccount?->name_en)
                         : ($invoice?->salesAccount?->name_en ?? $invoice?->salesAccount?->name_ar),
 
-                    'stock_qty' => (float) $line->quantity,
-                    'rate' => (float) $line->rate,
-                    'amount' => $amount,
-                    'tax_rate' => $taxRate,
-                    'vat_amount' => $vatAmount,
-                    'total' => $total,
+                    'stock_qty' => round((float) $line->quantity, 2),
+                    'rate' => round((float) $line->rate, 2),
+
+                    'amount' => round($amount, 2),
+                    'discount_amount' => round($itemDiscount, 2),
+                    'net_total' => round($netTotal, 2),
+
+                    'tax_rate' => round($taxRate, 2),
+                    'vat_amount' => round($vatAmount, 2),
+                    'total' => round($total, 2),
                 ];
             })
             ->values();
@@ -92,7 +109,11 @@ class ItemWiseSalesRegisterReportService
             'totals' => [
                 'stock_qty' => round($rows->sum('stock_qty'), 2),
                 'rate' => round($rows->sum('rate'), 2),
+
                 'amount' => round($rows->sum('amount'), 2),
+                'discount_amount' => round($rows->sum('discount_amount'), 2),
+                'net_total' => round($rows->sum('net_total'), 2),
+
                 'tax_rate' => round($rows->sum('tax_rate'), 2),
                 'vat_amount' => round($rows->sum('vat_amount'), 2),
                 'total' => round($rows->sum('total'), 2),

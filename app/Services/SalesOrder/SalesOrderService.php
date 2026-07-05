@@ -188,19 +188,24 @@ private function createDiscountApprovalRequest(
         ->where('company_id', $salesOrder->company_id)
         ->firstOrFail();
 
+    $user = auth('api')->user();
+
     $approvalLevel = $requestedDiscount <= (float) $settings->department_manager_max_discount
         ? 'department_manager'
         : 'cfo';
 
-    $status = $approvalLevel === 'department_manager'
-        ? 'pending_department_manager_approval'
-        : 'pending_department_manager_decision';
+    if ($user->hasRole('Accountant Chief')) {
+        $status = 'pending_cfo_approval';
+        $approvers = User::role('CFO')->get();
+    } else {
+        $status = 'pending_department_manager_approval';
+        $approvers = User::role('Accountant Chief')->get();
+    }
 
     $approvalRequest = DiscountApprovalRequest::query()
         ->where('sales_order_id', $salesOrder->id)
         ->whereIn('status', [
             'pending_department_manager_approval',
-            'pending_department_manager_decision',
             'pending_cfo_approval',
         ])
         ->first();
@@ -232,8 +237,8 @@ private function createDiscountApprovalRequest(
         ])->load(['salesOrder', 'requester']);
     }
 
-    foreach (User::role('Accountant Chief')->get() as $manager) {
-        $manager->notify(
+    foreach ($approvers as $approver) {
+        $approver->notify(
             new DiscountApprovalRequestedNotification($approvalRequest)
         );
     }
@@ -313,7 +318,6 @@ $discountDecision = $this->handleDiscountDecision($companyId, $data);
     ->where('sales_order_id', $salesOrder->id)
     ->whereIn('status', [
         'pending_department_manager_approval',
-        'pending_department_manager_decision',
         'pending_cfo_approval',
     ])
     ->exists();

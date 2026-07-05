@@ -81,7 +81,6 @@ class SalesInvoiceService
             'fees_total' => $totals['fees_total'],
             'discount_amount' => $totals['discount_amount'],
             'grand_total' => $totals['grand_total'],
-
             'is_asset_sale' => $data['is_asset_sale'] ?? false,
 
             'status' => 'draft',
@@ -154,6 +153,9 @@ class SalesInvoiceService
         $totals = $this->calculateTotals($companyId, $data);
         $accounts = $this->resolvePostingAccounts($companyId, $data);
 
+        $paidAmount = (float) ($data['paid_amount'] ?? $salesInvoice->paid_amount ?? 0);
+        $outstandingAmount = (float) $totals['grand_total'] - $paidAmount;
+
         $salesInvoice->update(array_merge([
             'customer_id' => $data['customer_id'],
             'sales_order_id' => $data['sales_order_id'] ?? null,
@@ -168,9 +170,11 @@ class SalesInvoiceService
 
             'payment_mode' => 'credit',
             'payment_account_id' => null,
-            'paid_amount' => 0,
-            'outstanding_amount' => $totals['grand_total'],
-            'payment_status' => 'unpaid',
+            'paid_amount' => $paidAmount,
+            'outstanding_amount' => max(round($outstandingAmount, 2), 0),
+            'payment_status' => $outstandingAmount <= 0
+                ? 'paid'
+                : ($paidAmount > 0 ? 'partially_paid' : 'unpaid'),
 
             'discount_percentage' => $data['discount_percentage'],
             'discount_amount' => $totals['discount_amount'],
@@ -208,7 +212,7 @@ class SalesInvoiceService
         ]);
     });
 }
-    public function submit(SalesInvoice $salesInvoice): SalesInvoice
+ public function submit(SalesInvoice $salesInvoice): SalesInvoice
 {
     if ($salesInvoice->status !== 'draft') {
         throw new RuntimeException('Only draft invoices can be submitted.');
@@ -218,15 +222,12 @@ class SalesInvoiceService
         ->where('sales_invoice_id', $salesInvoice->id)
         ->whereIn('status', [
             'pending_department_manager_approval',
-            'pending_department_manager_decision',
             'pending_cfo_approval',
         ])
         ->exists();
 
     if ($pendingApproval) {
-        throw new RuntimeException(
-            'Cannot submit invoice while discount approval is pending.'
-        );
+        throw new RuntimeException('Cannot submit invoice while discount approval is pending.');
     }
 
     $rejectedApproval = DiscountApprovalRequest::query()
@@ -235,9 +236,7 @@ class SalesInvoiceService
         ->exists();
 
     if ($rejectedApproval) {
-        throw new RuntimeException(
-            'Cannot submit invoice because discount approval was rejected.'
-        );
+        throw new RuntimeException('Cannot submit invoice because discount approval was rejected.');
     }
 
     app(\App\Services\FinancialYear\FinancialYearService::class)
@@ -293,19 +292,18 @@ class SalesInvoiceService
         $this->postJournalEntry($salesInvoice);
 
         $paidAmount = (float) ($salesInvoice->paid_amount ?? 0);
-        $creditNoteAmount = (float) ($salesInvoice->credit_note_amount ?? 0);
 
         $outstandingAmount =
             (float) $salesInvoice->grand_total
-            - $paidAmount
-            - $creditNoteAmount;
+            - $paidAmount;
 
         $salesInvoice->update([
             'status' => 'submitted',
             'paid_amount' => $paidAmount,
-            'credit_note_amount' => $creditNoteAmount,
-            'outstanding_amount' => max($outstandingAmount, 0),
-            'payment_status' => $outstandingAmount <= 0 ? 'paid' : 'unpaid',
+            'outstanding_amount' => max(round($outstandingAmount, 2), 0),
+            'payment_status' => $outstandingAmount <= 0
+                ? 'paid'
+                : ($paidAmount > 0 ? 'partially_paid' : 'unpaid'),
         ]);
 
         if ($salesInvoice->deliveryNote) {
@@ -456,7 +454,7 @@ class SalesInvoiceService
     ]);
 }
 
-    public function applyApprovedDiscount(
+   public function applyApprovedDiscount(
     SalesInvoice $invoice,
     float $discountPercentage
 ): SalesInvoice {
@@ -502,6 +500,9 @@ class SalesInvoiceService
 
         $totals = $this->calculateTotals($invoice->company_id, $data);
 
+        $paidAmount = (float) ($invoice->paid_amount ?? 0);
+        $outstandingAmount = (float) $totals['grand_total'] - $paidAmount;
+
         $invoice->update([
             'discount_percentage' => $discountPercentage,
             'discount_amount' => $totals['discount_amount'],
@@ -509,7 +510,10 @@ class SalesInvoiceService
             'tax_total' => $totals['tax_total'],
             'fees_total' => $totals['fees_total'],
             'grand_total' => $totals['grand_total'],
-            'outstanding_amount' => $totals['grand_total'],
+            'outstanding_amount' => max(round($outstandingAmount, 2), 0),
+            'payment_status' => $outstandingAmount <= 0
+                ? 'paid'
+                : ($paidAmount > 0 ? 'partially_paid' : 'unpaid'),
         ]);
 
         $invoice->taxes()->delete();
@@ -540,8 +544,7 @@ class SalesInvoiceService
         ]);
     });
 }
-
- public function createFromDeliveryNote(DeliveryNote $deliveryNote): SalesInvoice
+public function createFromDeliveryNote(DeliveryNote $deliveryNote): SalesInvoice
 {
     return DB::transaction(function () use ($deliveryNote) {
         if ($deliveryNote->status !== 'to_bill') {
@@ -572,6 +575,11 @@ class SalesInvoiceService
 
             'posting_method' => request('posting_method', 'default'),
 
+            'receivable_account_id' => request('receivable_account_id'),
+            'sales_account_id' => request('sales_account_id'),
+            'cogs_account_id' => request('cogs_account_id'),
+            'stock_account_id' => request('stock_account_id'),
+
             'payment_mode' => 'credit',
             'payment_account_id' => null,
 
@@ -579,6 +587,7 @@ class SalesInvoiceService
             'is_asset_sale' => false,
 
             'items' => $deliveryNote->items->map(fn ($item) => [
+                'delivery_note_item_id' => $item->id,
                 'item_id' => $item->item_id,
                 'warehouse_id' => $item->warehouse_id,
                 'quantity' => $item->quantity,
@@ -598,8 +607,7 @@ class SalesInvoiceService
                 ->toArray(),
         ]);
     });
-}
-    public function delete(SalesInvoice $salesInvoice): void
+}    public function delete(SalesInvoice $salesInvoice): void
     {
         if ($salesInvoice->status !== 'draft') {
             throw new RuntimeException('Only draft invoices can be deleted.');
@@ -673,7 +681,7 @@ class SalesInvoiceService
     }
 
     return 0;
-}    private function createDiscountApprovalRequest(
+}   private function createDiscountApprovalRequest(
     SalesInvoice $invoice,
     float $requestedDiscount,
     float $allowedDiscount
@@ -682,19 +690,24 @@ class SalesInvoiceService
         ->where('company_id', $invoice->company_id)
         ->firstOrFail();
 
+    $user = auth('api')->user();
+
     $approvalLevel = $requestedDiscount <= (float) $settings->department_manager_max_discount
         ? 'department_manager'
         : 'cfo';
 
-    $status = $approvalLevel === 'department_manager'
-        ? 'pending_department_manager_approval'
-        : 'pending_department_manager_decision';
+    if ($user->hasRole('Accountant Chief')) {
+        $status = 'pending_cfo_approval';
+        $approvers = User::role('CFO')->get();
+    } else {
+        $status = 'pending_department_manager_approval';
+        $approvers = User::role('Accountant Chief')->get();
+    }
 
     $approvalRequest = DiscountApprovalRequest::query()
         ->where('sales_invoice_id', $invoice->id)
         ->whereIn('status', [
             'pending_department_manager_approval',
-            'pending_department_manager_decision',
             'pending_cfo_approval',
         ])
         ->first();
@@ -727,8 +740,8 @@ class SalesInvoiceService
         ])->load(['invoice', 'requester']);
     }
 
-    foreach (User::role('Accountant Chief')->get() as $manager) {
-        $manager->notify(
+    foreach ($approvers as $approver) {
+        $approver->notify(
             new DiscountApprovalRequestedNotification($approvalRequest)
         );
     }

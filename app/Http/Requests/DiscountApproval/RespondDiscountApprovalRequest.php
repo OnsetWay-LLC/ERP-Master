@@ -12,24 +12,24 @@ class RespondDiscountApprovalRequest extends FormRequest
         return auth('api')->user()->can('screen.notifications');
     }
 
-    public function rules(): array
-    {
-        return [
-            'action' => [
-                'required',
-                Rule::in([
-                    'approve',
-                    'reject',
-                    'forward_to_cfo',
-                ]),
-            ],
+   public function rules(): array
+{
+    return [
+        'action' => [
+            'required',
+            Rule::in([
+                'approve',
+                'reject',
+                'forward_to_cfo',
+            ]),
+        ],
 
-            'rejection_reason' => [
-                'required_if:action,reject',
-                'nullable',
-                'string',
-                'max:1000',
-            ],
-        ];
-    }
+        'rejection_reason' => [
+            'required_if:action,reject',
+            'nullable',
+            'string',
+            'max:1000',
+        ],
+    ];
+}
 }

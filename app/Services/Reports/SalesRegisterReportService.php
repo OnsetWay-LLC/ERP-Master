@@ -91,75 +91,78 @@ class SalesRegisterReportService
                 'sales_order' => $invoice->salesOrder?->order_number ?? '-',
                 'warehouse' => $warehouseNames ?: '-',
 
-                'sales_account' => (float) $invoice->net_total,
+                'sales_account' => (float) $invoice->items->sum('amount'),
                 'vat' => (float) $invoice->tax_total,
                 'fees' => (float) $invoice->fees_total,
                 'discount' => (float) $invoice->discount_amount,
-                'net_total' => (float) ((float) $invoice->net_total - (float) $invoice->discount_amount),
+                'net_total' => (float) ((float) $invoice->items->sum('amount') - (float) $invoice->discount_amount),
                 'grand_total' => (float) $invoice->grand_total,
                 'outstanding' => (float) $invoice->outstanding_amount,
+                
             ];
         });
     }
 
-    private function returnRows(string $fromDate, string $toDate, ?int $customerId)
-    {
-        $query = SalesReturn::query()
-            ->with([
-                'customer',
-                'creator',
-                'salesInvoice',
-                'items.warehouse',
-                'salesInvoice.receivableAccount',
-            ])
-            ->where('status', 'submitted')
-            ->whereBetween('posting_date', [$fromDate, $toDate]);
+  private function returnRows(string $fromDate, string $toDate, ?int $customerId)
+{
+    $query = SalesReturn::query()
+        ->with([
+            'customer',
+            'creator',
+            'salesInvoice',
+            'items.warehouse',
+            'salesInvoice.receivableAccount',
+        ])
+        ->where('status', 'submitted')
+        ->whereBetween('posting_date', [$fromDate, $toDate]);
 
-        if ($customerId) {
-            $query->where('customer_id', $customerId);
-        }
-
-        return $query->get()->map(function ($return) {
-            $locale = app()->getLocale();
-
-            $warehouseNames = $return->items
-                ->pluck('warehouse')
-                ->filter()
-                ->map(function ($warehouse) use ($locale) {
-                    return $locale === 'ar'
-                        ? ($warehouse->name_ar ?? $warehouse->name_en)
-                        : ($warehouse->name_en ?? $warehouse->name_ar);
-                })
-                ->unique()
-                ->values()
-                ->implode(', ');
-
-            return [
-                'voucher_type' => 'Credit Note',
-                'voucher' => $return->return_number,
-                'posting_date' => $return->posting_date,
-
-                'customer_name' => $locale === 'ar'
-                    ? ($return->customer?->name_ar ?? $return->customer?->name_en)
-                    : ($return->customer?->name_en ?? $return->customer?->name_ar),
-
-                'receivable_account' => $locale === 'ar'
-                    ? ($return->salesInvoice?->receivableAccount?->name_ar ?? $return->salesInvoice?->receivableAccount?->name_en)
-                    : ($return->salesInvoice?->receivableAccount?->name_en ?? $return->salesInvoice?->receivableAccount?->name_ar),
-
-                'owner' => $return->creator?->name ?? $return->creator?->email ?? '-',
-
-                'sales_order' => $return->salesInvoice?->salesOrder?->order_number ?? '-',
-                'warehouse' => $warehouseNames ?: '-',
-
-                'sales_account' => -1 * (float) $return->net_total,
-                'vat' => -1 * (float) $return->tax_total,
-                'fees' => -1 * (float) $return->fees_total,
-                'discount' => -1 * (float) $return->discount_amount,
-                'net_total' => -1 * ((float) $return->net_total - (float) $return->discount_amount),
-                'grand_total' => -1 * (float) $return->grand_total,
-                'outstanding' => -1 * (float) $return->grand_total,
-            ];
-        });
+    if ($customerId) {
+        $query->where('customer_id', $customerId);
     }
+
+    return $query->get()->map(function ($return) {
+        $locale = app()->getLocale();
+
+        $returnItemTotal = (float) $return->items->sum('amount');
+
+        $warehouseNames = $return->items
+            ->pluck('warehouse')
+            ->filter()
+            ->map(function ($warehouse) use ($locale) {
+                return $locale === 'ar'
+                    ? ($warehouse->name_ar ?? $warehouse->name_en)
+                    : ($warehouse->name_en ?? $warehouse->name_ar);
+            })
+            ->unique()
+            ->values()
+            ->implode(', ');
+
+        return [
+            'voucher_type' => 'Credit Note',
+            'voucher' => $return->return_number,
+            'posting_date' => $return->posting_date,
+
+            'customer_name' => $locale === 'ar'
+                ? ($return->customer?->name_ar ?? $return->customer?->name_en)
+                : ($return->customer?->name_en ?? $return->customer?->name_ar),
+
+            'receivable_account' => $locale === 'ar'
+                ? ($return->salesInvoice?->receivableAccount?->name_ar ?? $return->salesInvoice?->receivableAccount?->name_en)
+                : ($return->salesInvoice?->receivableAccount?->name_en ?? $return->salesInvoice?->receivableAccount?->name_ar),
+
+            'owner' => $return->creator?->name ?? $return->creator?->email ?? '-',
+
+            'sales_order' => $return->salesInvoice?->salesOrder?->order_number ?? '-',
+            'warehouse' => $warehouseNames ?: '-',
+
+            'sales_account' => $returnItemTotal,
+            'vat' =>  (float) $return->tax_total,
+            'fees' =>  (float) $return->fees_total,
+            'discount' =>  (float) $return->discount_amount,
+            'net_total' => (float) ($returnItemTotal + (float) $return->discount_amount),
+            'grand_total' =>  (float) $return->grand_total,
+            'outstanding' =>  (float) $return->grand_total,
+        ];
+    });
+}
 }

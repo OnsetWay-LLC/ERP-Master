@@ -35,6 +35,7 @@ class SalesInvoiceResource extends JsonResource
             'discount_amount' => (float) $this->discount_amount,
             'grand_total' => (float) $this->grand_total,
             'paid_amount' => (float) $this->paid_amount,
+            'amount' => (float) $this->amount,
             'credit_note_amount' => (float) $this->credit_note_amount,
             'outstanding_amount' => (float) $this->outstanding_amount,
             'payment_status' => $this->payment_status,

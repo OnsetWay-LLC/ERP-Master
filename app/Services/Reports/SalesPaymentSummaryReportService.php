@@ -58,7 +58,7 @@ class SalesPaymentSummaryReportService
 
                 $row['sales_return'] +=
                     (float) $invoice->net_total
-                    - $returnNet;
+                    + $returnNet;
 
                 $row['tax'] +=
                     (float) $invoice->tax_total
