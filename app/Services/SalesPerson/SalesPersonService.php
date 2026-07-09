@@ -69,8 +69,8 @@ class SalesPersonService
                 'commission_rate' => $data['commission_rate'],
 
                 'use_default_account' => $useDefaultAccount,
-                'commission_account_id' => $useDefaultAccount ? null : $data['commission_account_id'],
-                'payroll_account_id' => $useDefaultAccount ? null : $data['payroll_account_id'],
+                'commission_account_id' => $useDefaultAccount ? null : $data['direct_expense_account_id'],
+                'payroll_account_id' => $useDefaultAccount ? null : $data['payable_account_id'],
                 
 
                 'is_active' => $data['is_active'] ?? true,
@@ -113,8 +113,8 @@ class SalesPersonService
                 'commission_rate' => $data['commission_rate'],
 
                 'use_default_account' => $useDefaultAccount,
-                'commission_account_id' => $useDefaultAccount ? null : $data['commission_account_id'],
-                'payroll_account_id' => $useDefaultAccount ? null : $data['payroll_account_id'],
+               'commission_account_id' => $useDefaultAccount ? null : $data['direct_expense_account_id'],
+'payroll_account_id' => $useDefaultAccount ? null : $data['payable_account_id'],
 
                 'is_active' => $data['is_active'] ?? true,
             ]);

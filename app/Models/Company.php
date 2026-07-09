@@ -18,6 +18,11 @@ class Company extends Model
         'fax',
         'phone',
         'email',
+        'logo',
+        'report_header',
+'report_footer',
+'show_logo_in_reports',
+'show_company_info_in_reports',
     ];
 
     protected $casts = [

@@ -1,212 +1,548 @@
 <!DOCTYPE html>
-<html dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}" lang="{{ app()->getLocale() }}">
+<html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
+
 <head>
-  <meta charset="UTF-8">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'IBM Plex Sans', 'Tajawal', system-ui, sans-serif; font-size: 13px; color: #1a1a1a; background: #f0f4f8; padding: 32px; }
-    .gl { background: #fff; border-radius: 10px; overflow: hidden; max-width: 1200px; margin: 0 auto; }
+    <meta charset="UTF-8">
 
-    .gl-top { background: #0C447C; padding: 20px 24px; display: flex; justify-content: space-between; align-items: flex-end; }
-    .gl-top .lbl { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: #85B7EB; font-weight: 600; margin-bottom: 4px; }
-    .gl-top .acc-name { font-size: 20px; font-weight: 500; color: #fff; }
-    .gl-top .acc-no { font-size: 12px; color: #85B7EB; margin-top: 3px; font-family: monospace; direction: ltr; display: inline-block; }
-    .gl-top-right { text-align: end; }
-    .gl-top-right .date-lbl { font-size: 10px; color: #85B7EB; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; margin-bottom: 2px; }
-    .gl-top-right .date-val { font-size: 12px; color: #E6F1FB; direction: ltr; display: inline-block; }
+    <title>
+        {{ app()->getLocale() === 'ar' ? 'دفتر الأستاذ العام' : 'General Ledger Report' }}
+    </title>
 
-    .gl-meta { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid #dde5ef; }
-    .gl-meta-item { padding: 12px 16px; border-inline-end: 1px solid #dde5ef; }
-    .gl-meta-item:last-child { border-inline-end: none; }
-    .gl-meta-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #888; font-weight: 600; margin-bottom: 3px; }
-    .gl-meta-val { font-size: 13px; font-weight: 500; color: #1a1a1a; }
+    <style>
+        body {
+            font-family: dejavusans, sans-serif;
+            font-size: 10px;
+            color: #111827;
+        }
 
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    thead tr { background: #0C447C; }
-    thead th { padding: 10px 8px; text-align: start; font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #B5D4F4; white-space: nowrap; }
-    thead th.r { text-align: end; }
-    tbody tr { border-bottom: 1px solid #dde5ef; }
-    tbody tr:last-child { border-bottom: none; }
-    tbody tr:nth-child(even) td { background: #F9FBFD; }
-    tbody td { padding: 9px 8px; color: #1a1a1a; vertical-align: top; word-break: break-word; }
-    tbody td.r { text-align: end; font-family: monospace; font-size: 12px; white-space: nowrap; direction: ltr; }
+        /* =========================
+           Company Header
+        ========================== */
 
-    .dt { color: #555; font-size: 11.5px; white-space: nowrap; direction: ltr; display: inline-block; }
-    .vc { font-family: monospace; font-size: 11.5px; color: #555; direction: ltr; display: inline-block; }
-    .usr { font-size: 11.5px; color: #888; }
+        .company-header {
+            text-align: center;
+            margin-bottom: 12px;
+        }
 
-    .account-cell .acc-num { font-family: monospace; font-size: 11px; color: #0C447C; direction: ltr; display: inline-block; }
-    .account-cell .acc-name { font-size: 11.5px; color: #1a1a1a; margin-top: 2px; display: block; }
+        .company-logo {
+            text-align: center;
+            margin-bottom: 5px;
+        }
 
-    .badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; display: inline-block; white-space: nowrap; }
-    .b-j { background: #E6F1FB; color: #0C447C; }
-    .b-p { background: #FDF0D5; color: #633806; }
-    .b-r { background: #E1F5EE; color: #085041; }
-    .b-d { background: #F0F0EE; color: #555; }
+        .company-logo img {
+            max-height: 60px;
+            max-width: 150px;
+        }
 
-    .dv { color: #185FA5; }
-    .cv { color: #0F6E56; }
-    .bv { font-weight: 500; color: #0C447C; }
-    .dash { color: #ccc; }
+        .company-name {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
 
-    .total-row td { background: #E6F1FB; border-top: 2px solid #0C447C; font-weight: 600; font-family: monospace; color: #0C447C; padding: 11px 8px; direction: ltr; text-align: end; }
-    .total-row .tl { font-family: 'Tajawal', system-ui, sans-serif; font-size: 11px; color: #185FA5; font-weight: 600; direction: inherit; text-align: start; }
+        .company-info {
+            font-size: 9px;
+            color: #4b5563;
+            line-height: 1.5;
+        }
 
-    .gl-cards { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 2px solid #dde5ef; }
-    .gl-card { padding: 14px 16px; border-inline-end: 1px solid #dde5ef; background: #F5F8FC; }
-    .gl-card:last-child { border-inline-end: none; }
-    .gl-card-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #888; font-weight: 600; margin-bottom: 4px; }
-    .gl-card-val { font-size: 17px; font-weight: 500; color: #0C447C; font-family: monospace; direction: ltr; display: inline-block; }
-    .gl-card-val.dr { color: #185FA5; }
-    .gl-card-val.cr { color: #0F6E56; }
+        .custom-report-header {
+            font-size: 9px;
+            color: #374151;
+            margin-top: 5px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #d1d5db;
+        }
 
-    .closing { display: flex; justify-content: space-between; align-items: center; background: #0C447C; padding: 13px 20px; }
-    .cl-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: #85B7EB; font-weight: 600; }
-    .cl-val { font-family: monospace; font-size: 16px; font-weight: 500; color: #fff; direction: ltr; }
-  </style>
+        /* =========================
+           Report Title
+        ========================== */
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 12px;
+        }
+
+        .report-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .report-period {
+            font-size: 10px;
+            color: #4b5563;
+        }
+
+        /* =========================
+           Account Information
+        ========================== */
+
+        .account-info {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+
+        .account-info td {
+            border: 1px solid #d1d5db;
+            padding: 6px;
+        }
+
+        .info-label {
+            font-weight: bold;
+            background: #f3f4f6;
+            width: 15%;
+        }
+
+        .info-value {
+            width: 35%;
+        }
+
+        /* =========================
+           Main Table
+        ========================== */
+
+        table.ledger-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .ledger-table th {
+            background: #f3f4f6;
+            font-weight: bold;
+        }
+
+        .ledger-table th,
+        .ledger-table td {
+            border: 1px solid #d1d5db;
+            padding: 5px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .ledger-table .text-left {
+            text-align: left;
+        }
+
+        .ledger-table .amount {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .total-row {
+            background: #f9fafb;
+            font-weight: bold;
+        }
+
+        /* =========================
+           Summary
+        ========================== */
+
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        .summary-table td {
+            border: 1px solid #d1d5db;
+            padding: 7px;
+            text-align: center;
+        }
+
+        .summary-label {
+            background: #f3f4f6;
+            font-weight: bold;
+        }
+
+        .summary-value {
+            font-weight: bold;
+            font-size: 11px;
+        }
+
+        .empty-message {
+            text-align: center;
+            padding: 15px;
+            color: #6b7280;
+        }
+    </style>
 </head>
+
 <body>
 
-<div class="gl">
+{{-- =====================================
+     Company Header
+===================================== --}}
 
-  <div class="gl-top">
-    <div>
-      <div class="lbl">
-        {{ app()->getLocale() === 'ar' ? 'دفتر الأستاذ العام' : 'General Ledger' }}
-      </div>
-      <div class="acc-name">
-        {{ app()->getLocale() === 'ar' ? $report['account']['name_ar'] : $report['account']['name_en'] }}
-      </div>
-      <div class="acc-no">{{ $report['account']['account_number'] }}</div>
+<div class="company-header">
+
+    @if($company->logo)
+        <div class="company-logo">
+            <img src="{{ public_path($company->logo) }}">
+        </div>
+    @endif
+
+    <div class="company-name">
+        {{ app()->getLocale() === 'ar'
+            ? ($company->name_ar ?? $company->name_en)
+            : ($company->name_en ?? $company->name_ar)
+        }}
     </div>
 
-    <div class="gl-top-right">
-      <div class="date-lbl">
-        {{ app()->getLocale() === 'ar' ? 'الفترة' : 'Period' }}
-      </div>
-      <div class="date-val">
-        {{ $report['filters']['from_date'] ?? (app()->getLocale() === 'ar' ? 'الكل' : 'All') }}
-        —
-        {{ $report['filters']['to_date'] ?? (app()->getLocale() === 'ar' ? 'الكل' : 'All') }}
-      </div>
-    </div>
-  </div>
+    <div class="company-info">
 
-  <div class="gl-meta">
-    <div class="gl-meta-item">
-      <div class="gl-meta-lbl">{{ app()->getLocale() === 'ar' ? 'نوع الحساب' : 'Account type' }}</div>
-      <div class="gl-meta-val">{{ $report['account']['account_type'] }}</div>
-    </div>
+        @if($company->email ?? null)
+            {{ $company->email }}
+        @endif
 
-    <div class="gl-meta-item">
-      <div class="gl-meta-lbl">{{ app()->getLocale() === 'ar' ? 'التصنيف الرئيسي' : 'Root category' }}</div>
-      <div class="gl-meta-val">{{ $report['account']['root_category'] }}</div>
+        @if($company->phone ?? null)
+            |
+            {{ $company->phone }}
+        @endif
+
+        @if($company->country ?? null)
+            |
+            {{ $company->country }}
+        @endif
+
     </div>
 
-    <div class="gl-meta-item">
-      <div class="gl-meta-lbl">{{ app()->getLocale() === 'ar' ? 'التصنيف الفرعي' : 'Sub category' }}</div>
-      <div class="gl-meta-val">{{ $report['account']['sub_category'] ?? '—' }}</div>
-    </div>
-  </div>
+    @if($company->report_header)
+        <div class="custom-report-header">
+            {!! nl2br(e($company->report_header)) !!}
+        </div>
+    @endif
 
-  <table>
+</div>
+
+
+{{-- =====================================
+     Report Title
+===================================== --}}
+
+<div class="report-header">
+
+    <div class="report-title">
+        {{ app()->getLocale() === 'ar'
+            ? 'دفتر الأستاذ العام'
+            : 'General Ledger Report'
+        }}
+    </div>
+
+    <div class="report-period">
+
+        {{ app()->getLocale() === 'ar' ? 'الفترة:' : 'Period:' }}
+
+        {{ $report['filters']['from_date']
+            ?? (app()->getLocale() === 'ar' ? 'الكل' : 'All')
+        }}
+
+        -
+
+        {{ $report['filters']['to_date']
+            ?? (app()->getLocale() === 'ar' ? 'الكل' : 'All')
+        }}
+
+    </div>
+
+</div>
+
+
+{{-- =====================================
+     Account Information
+===================================== --}}
+
+<table class="account-info">
+
+    <tr>
+
+        <td class="info-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'رقم الحساب'
+                : 'Account Number'
+            }}
+        </td>
+
+        <td class="info-value">
+            {{ $report['account']['account_number'] }}
+        </td>
+
+        <td class="info-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'اسم الحساب'
+                : 'Account Name'
+            }}
+        </td>
+
+        <td class="info-value">
+            {{ app()->getLocale() === 'ar'
+                ? $report['account']['name_ar']
+                : $report['account']['name_en']
+            }}
+        </td>
+
+    </tr>
+
+    <tr>
+
+        <td class="info-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'نوع الحساب'
+                : 'Account Type'
+            }}
+        </td>
+
+        <td class="info-value">
+            {{ $report['account']['account_type'] ?? '—' }}
+        </td>
+
+        <td class="info-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'الرصيد الافتتاحي'
+                : 'Opening Balance'
+            }}
+        </td>
+
+        <td class="info-value">
+            {{ $report['opening_balance']['display'] }}
+        </td>
+
+    </tr>
+
+</table>
+
+
+{{-- =====================================
+     General Ledger Table
+===================================== --}}
+
+<table class="ledger-table">
+
     <thead>
-      <tr>
-        <th style="width:82px">{{ app()->getLocale() === 'ar' ? 'التاريخ' : 'Date' }}</th>
-        <th style="width:88px">{{ app()->getLocale() === 'ar' ? 'رقم القيد' : 'Voucher' }}</th>
-        <th style="width:82px">{{ app()->getLocale() === 'ar' ? 'النوع' : 'Type' }}</th>
-        <th style="width:135px">{{ app()->getLocale() === 'ar' ? 'الحساب' : 'Account' }}</th>
-        <th style="width:95px">{{ app()->getLocale() === 'ar' ? 'أنشئ بواسطة' : 'Created by' }}</th>
-        <th>{{ app()->getLocale() === 'ar' ? 'البيان' : 'Description' }}</th>
-        <th class="r" style="width:88px">{{ app()->getLocale() === 'ar' ? 'مدين' : 'Debit' }}</th>
-        <th class="r" style="width:88px">{{ app()->getLocale() === 'ar' ? 'دائن' : 'Credit' }}</th>
-        <th class="r" style="width:96px">{{ app()->getLocale() === 'ar' ? 'الرصيد' : 'Balance' }}</th>
-      </tr>
+
+    <tr>
+
+        <th>#</th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'التاريخ'
+                : 'Date'
+            }}
+        </th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'رقم القيد'
+                : 'Voucher No.'
+            }}
+        </th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'النوع'
+                : 'Type'
+            }}
+        </th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'الحساب'
+                : 'Account'
+            }}
+        </th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'البيان'
+                : 'Description'
+            }}
+        </th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'مدين'
+                : 'Debit'
+            }}
+        </th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'دائن'
+                : 'Credit'
+            }}
+        </th>
+
+        <th>
+            {{ app()->getLocale() === 'ar'
+                ? 'الرصيد'
+                : 'Balance'
+            }}
+        </th>
+
+    </tr>
+
     </thead>
 
     <tbody>
-      @foreach ($report['rows'] as $row)
-        @php
-          $t = strtolower($row['voucher_type'] ?? '');
 
-          $bc = str_contains($t, 'journal') ? 'b-j'
-              : (str_contains($t, 'payment') ? 'b-p'
-              : (str_contains($t, 'receipt') ? 'b-r' : 'b-d'));
-
-          $typeLabel = app()->getLocale() === 'ar'
-            ? match(true) {
-                str_contains($t, 'journal') => 'قيد يومية',
-                str_contains($t, 'payment') => 'سند صرف',
-                str_contains($t, 'receipt') => 'سند قبض',
-                default => $row['voucher_type'],
-              }
-            : $row['voucher_type'];
-
-          $rowAccountName = app()->getLocale() === 'ar'
-              ? ($row['account']['name_ar'] ?? '—')
-              : ($row['account']['name_en'] ?? '—');
-        @endphp
+    @forelse($report['rows'] as $index => $row)
 
         <tr>
-          <td><span class="dt">{{ $row['date'] }}</span></td>
 
-          <td><span class="vc">{{ $row['voucher_no'] }}</span></td>
+            <td>
+                {{ $index + 1 }}
+            </td>
 
-          <td>
-            <span class="badge {{ $bc }}">{{ $typeLabel }}</span>
-          </td>
+            <td>
+                {{ $row['date'] ?? '—' }}
+            </td>
 
-          <td class="account-cell">
-            <span class="acc-num">{{ $row['account']['account_number'] ?? '—' }}</span>
-            <span class="acc-name">{{ $rowAccountName }}</span>
-          </td>
+            <td>
+                {{ $row['voucher_no'] ?? '—' }}
+            </td>
 
-          <td class="usr">{{ $row['created_by']['name'] ?? '—' }}</td>
+            <td>
+                {{ $row['voucher_type'] ?? '—' }}
+            </td>
 
-          <td>{{ $row['description'] }}</td>
+            <td class="text-left">
 
-          <td class="r dv">{!! $row['debit'] ?: '<span class="dash">—</span>' !!}</td>
+                @if($row['account']['account_number'] ?? null)
+                    {{ $row['account']['account_number'] }}
+                    -
+                @endif
 
-          <td class="r cv">{!! $row['credit'] ?: '<span class="dash">—</span>' !!}</td>
+                {{ app()->getLocale() === 'ar'
+                    ? ($row['account']['name_ar'] ?? '—')
+                    : ($row['account']['name_en'] ?? '—')
+                }}
 
-          <td class="r bv">{{ $row['balance'] }}</td>
+            </td>
+
+            <td class="text-left">
+                {{ $row['description'] ?? '—' }}
+            </td>
+
+            <td class="amount">
+                {{ $row['debit'] ?? '0.00' }}
+            </td>
+
+            <td class="amount">
+                {{ $row['credit'] ?? '0.00' }}
+            </td>
+
+            <td class="amount">
+                {{ $row['balance'] ?? '0.00' }}
+            </td>
+
         </tr>
-      @endforeach
 
-      <tr class="total-row">
-        <td class="tl" colspan="6">
-          {{ app()->getLocale() === 'ar' ? 'المجموع الكلي' : 'Grand total' }}
-        </td>
-        <td class="r dv">{{ $report['grand_total']['total_debit'] }}</td>
-        <td class="r cv">{{ $report['grand_total']['total_credit'] }}</td>
-        <td class="r">{{ $report['closing_balance']['display'] }}</td>
-      </tr>
+    @empty
+
+        <tr>
+            <td colspan="9" class="empty-message">
+                {{ app()->getLocale() === 'ar'
+                    ? 'لا توجد حركات خلال الفترة المحددة.'
+                    : 'No ledger entries found for the selected period.'
+                }}
+            </td>
+        </tr>
+
+    @endforelse
+
     </tbody>
-  </table>
 
-  <div class="gl-cards">
-    <div class="gl-card">
-      <div class="gl-card-lbl">{{ app()->getLocale() === 'ar' ? 'الرصيد الافتتاحي' : 'Opening balance' }}</div>
-      <div class="gl-card-val">{{ $report['opening_balance']['display'] }}</div>
-    </div>
+    <tfoot>
 
-    <div class="gl-card">
-      <div class="gl-card-lbl">{{ app()->getLocale() === 'ar' ? 'إجمالي المدين' : 'Total debit' }}</div>
-      <div class="gl-card-val dr">{{ $report['grand_total']['total_debit'] }}</div>
-    </div>
+    <tr class="total-row">
 
-    <div class="gl-card">
-      <div class="gl-card-lbl">{{ app()->getLocale() === 'ar' ? 'إجمالي الدائن' : 'Total credit' }}</div>
-      <div class="gl-card-val cr">{{ $report['grand_total']['total_credit'] }}</div>
-    </div>
-  </div>
+        <td colspan="6">
+            {{ app()->getLocale() === 'ar'
+                ? 'المجموع الكلي'
+                : 'Grand Total'
+            }}
+        </td>
 
-  <div class="closing">
-    <span class="cl-lbl">{{ app()->getLocale() === 'ar' ? 'الرصيد الختامي' : 'Closing balance' }}</span>
-    <span class="cl-val">{{ $report['closing_balance']['display'] }}</span>
-  </div>
+        <td class="amount">
+            {{ $report['grand_total']['total_debit'] }}
+        </td>
 
-</div>
+        <td class="amount">
+            {{ $report['grand_total']['total_credit'] }}
+        </td>
+
+        <td class="amount">
+            {{ $report['closing_balance']['display'] }}
+        </td>
+
+    </tr>
+
+    </tfoot>
+
+</table>
+
+
+{{-- =====================================
+     Summary
+===================================== --}}
+
+<table class="summary-table">
+
+    <tr>
+
+        <td class="summary-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'الرصيد الافتتاحي'
+                : 'Opening Balance'
+            }}
+        </td>
+
+        <td class="summary-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'إجمالي المدين'
+                : 'Total Debit'
+            }}
+        </td>
+
+        <td class="summary-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'إجمالي الدائن'
+                : 'Total Credit'
+            }}
+        </td>
+
+        <td class="summary-label">
+            {{ app()->getLocale() === 'ar'
+                ? 'الرصيد الختامي'
+                : 'Closing Balance'
+            }}
+        </td>
+
+    </tr>
+
+    <tr>
+
+        <td class="summary-value">
+            {{ $report['opening_balance']['display'] }}
+        </td>
+
+        <td class="summary-value">
+            {{ $report['grand_total']['total_debit'] }}
+        </td>
+
+        <td class="summary-value">
+            {{ $report['grand_total']['total_credit'] }}
+        </td>
+
+        <td class="summary-value">
+            {{ $report['closing_balance']['display'] }}
+        </td>
+
+    </tr>
+
+</table>
 
 </body>
 </html>

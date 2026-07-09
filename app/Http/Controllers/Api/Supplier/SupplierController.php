@@ -8,7 +8,10 @@ use App\Services\Supplier\SupplierService;
 use App\Http\Requests\Supplier\IndexSupplierRequest;
 use App\Http\Requests\Supplier\StoreSupplierRequest;
 use App\Http\Requests\Supplier\UpdateSupplierRequest;
-
+use App\Exports\SuppliersExport;
+use App\Imports\SuppliersImport;
+use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Http\Request;
 
 class SupplierController extends Controller
 {
@@ -56,4 +59,28 @@ class SupplierController extends Controller
             'message' => 'Restored successfully'
         ]);
     }
+    public function export()
+{
+    return Excel::download(
+        new SuppliersExport(),
+        'suppliers.xlsx'
+    );
+}
+
+public function import(Request $request)
+{
+    $request->validate([
+        'file' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+    ]);
+
+    Excel::import(
+        new SuppliersImport($this->service),
+        $request->file('file')
+    );
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Suppliers imported successfully.',
+    ]);
+}
 }

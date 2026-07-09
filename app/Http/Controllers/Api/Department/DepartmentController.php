@@ -77,4 +77,15 @@ class DepartmentController extends Controller
             'message' => 'Department deleted successfully',
         ]);
     }
+    public function restore(int $id): JsonResponse
+{
+    $department = Department::withTrashed()->findOrFail($id);
+
+    $this->service->restore($department);
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Department restored successfully.',
+    ]);
+}
 }

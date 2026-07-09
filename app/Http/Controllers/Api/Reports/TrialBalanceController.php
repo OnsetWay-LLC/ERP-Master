@@ -7,6 +7,7 @@ use App\Http\Requests\Reports\TrialBalanceRequest;
 use App\Services\Reports\TrialBalanceService;
 use Illuminate\Http\JsonResponse;
 use Mpdf\Mpdf;
+use App\Models\Company;
 use Illuminate\Support\Facades\View;
 
 class TrialBalanceController extends Controller
@@ -33,37 +34,53 @@ class TrialBalanceController extends Controller
             'data' => $data,
         ]);
     }
-    public function exportPdf(TrialBalanceRequest $request)
+   public function exportPdf(TrialBalanceRequest $request)
 {
+    $company = Company::query()->firstOrFail();
+
     $data = $this->service->generate(
         $this->companyId(),
         $request->validated('from_date'),
         $request->validated('to_date')
     );
 
-    $html = View::make(
-        'pdf.trial-balance',
-        [
-            'report' => $data,
-        ]
-    )->render();
+    $html = View::make('pdf.trial-balance', [
+        'company' => $company,
+        'report' => $data,
+    ])->render();
 
     $mpdf = new Mpdf([
         'mode' => 'utf-8',
-        'format' => 'A4',
-        'orientation' => 'L',
+        'format' => 'A4-L',
+        'default_font' => 'dejavusans',
+        'margin_top' => 8,
+        'margin_bottom' => 18,
+        'margin_left' => 8,
+        'margin_right' => 8,
     ]);
 
-    $mpdf->SetDirectionality('rtl');
+    if (app()->getLocale() === 'ar') {
+        $mpdf->SetDirectionality('rtl');
+    }
+
+    $this->applySystemFooter($mpdf);
 
     $mpdf->WriteHTML($html);
 
-    return response(
-        $mpdf->Output(
-            'trial-balance.pdf',
-            'S'
-        ),
-        200
-    )->header('Content-Type', 'application/pdf');
+    return response($mpdf->Output('trial-balance.pdf', 'S'), 200)
+        ->header('Content-Type', 'application/pdf');
+}
+
+private function applySystemFooter(Mpdf $mpdf): void
+{
+    $footerImage = app()->getLocale() === 'ar'
+        ? public_path('images/reports/system-footer-ar.png')
+        : public_path('images/reports/system-footer-en.png');
+
+    $mpdf->SetHTMLFooter('
+        <div style="text-align:center; padding-top:4px;">
+            <img src="' . $footerImage . '" style="width:100%; max-width:650px;">
+        </div>
+    ');
 }
 }

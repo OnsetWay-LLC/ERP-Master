@@ -75,19 +75,50 @@ public function exportPdf(Request $request)
         'to_date' => ['nullable', 'date', 'after_or_equal:from_date'],
     ]);
 
-    $report = $this->service->report($this->companyId(), $filters);
+    $company = Company::query()->firstOrFail();
 
-    $html = view('pdf.general-ledger', compact('report'))->render();
+    $report = $this->service->report(
+        $this->companyId(),
+        $filters
+    );
+
+    $html = view('pdf.general-ledger', [
+        'company' => $company,
+        'report' => $report,
+    ])->render();
 
     $mpdf = new Mpdf([
         'mode' => 'utf-8',
-        'format' => 'A4',
+        'format' => 'A4-L',
+        'default_font' => 'dejavusans',
+        'margin_top' => 8,
+        'margin_bottom' => 18,
+        'margin_left' => 8,
+        'margin_right' => 8,
     ]);
+
+    $this->applySystemFooter($mpdf);
 
     $mpdf->WriteHTML($html);
 
     return response($mpdf->Output('', 'S'))
         ->header('Content-Type', 'application/pdf')
-        ->header('Content-Disposition', 'inline; filename=\"general-ledger.pdf\"');
+        ->header(
+            'Content-Disposition',
+            'inline; filename="general-ledger.pdf"'
+        );
+}
+
+private function applySystemFooter(Mpdf $mpdf): void
+{
+    $footerImage = app()->getLocale() === 'ar'
+        ? public_path('images/reports/system-footer-ar.png')
+        : public_path('images/reports/system-footer-en.png');
+
+    $mpdf->SetHTMLFooter('
+        <div style="text-align:center; padding-top:4px;">
+            <img src="' . $footerImage . '" style="width:100%; max-width:650px;">
+        </div>
+    ');
 }
 }

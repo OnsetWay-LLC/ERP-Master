@@ -10,7 +10,10 @@ use App\Http\Resources\Customer\CustomerResource;
 use App\Models\Customer;
 use App\Services\Customer\CustomerService;
 use Illuminate\Http\JsonResponse;
-
+use App\Exports\CustomersExport;
+use App\Imports\CustomersImport;
+use Maatwebsite\Excel\Facades\Excel;
+use Illuminate\Http\Request;
 class CustomerController extends Controller
 {
     public function __construct(
@@ -87,4 +90,29 @@ class CustomerController extends Controller
             'message' => 'Customer restored successfully.',
         ]);
     }
+    public function export()
+{
+    return Excel::download(
+        new CustomersExport(),
+        'customers.xlsx'
+    );
+}
+
+public function import(Request $request)
+{
+    $request->validate([
+        'file' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+    ]);
+
+    Excel::import(
+        new CustomersImport($this->service),
+        $request->file('file')
+    );
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Customers imported successfully.',
+    ]);
+}
+
 }

@@ -9,17 +9,21 @@ use App\Services\Reports\SalesPersonPerformanceReportService;
 use Illuminate\Http\JsonResponse;
 use Mpdf\Mpdf;
 
+
 class SalesPersonPerformanceReportController extends Controller
 {
     public function __construct(
         private readonly SalesPersonPerformanceReportService $service
-    ) {
+    ) {}
+
+    private function companyId(): ?int
+    {
+        return auth()->user()->company_id ?? Company::query()->value('id');
     }
 
     public function index(SalesPersonPerformanceReportRequest $request): JsonResponse
     {
-        $companyId = auth()->user()->company_id
-            ?? Company::query()->value('id');
+        $companyId = $this->companyId();
 
         if (!$companyId) {
             return response()->json([
@@ -35,10 +39,27 @@ class SalesPersonPerformanceReportController extends Controller
         ]);
     }
 
+    public function postCommission(SalesPersonPerformanceReportRequest $request): JsonResponse
+    {
+        $companyId = $this->companyId();
+
+        if (!$companyId) {
+            return response()->json([
+                'status' => false,
+                'message' => 'No company found.',
+            ], 422);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Commission posting completed successfully.',
+            'data' => $this->service->postCommission((int) $companyId, $request->validated()),
+        ]);
+    }
+
     public function pdf(SalesPersonPerformanceReportRequest $request)
     {
-        $companyId = auth()->user()->company_id
-            ?? Company::query()->value('id');
+        $companyId = $this->companyId();
 
         if (!$companyId) {
             return response()->json([
@@ -69,16 +90,12 @@ class SalesPersonPerformanceReportController extends Controller
             'margin_right' => 8,
         ]);
 
-        if ($locale === 'ar') {
-            $mpdf->SetDirectionality('rtl');
-        } else {
-            $mpdf->SetDirectionality('ltr');
-        }
-
+        $mpdf->SetDirectionality($locale === 'ar' ? 'rtl' : 'ltr');
         $mpdf->WriteHTML($html);
 
         return response($mpdf->Output('sales-person-performance-report.pdf', 'S'))
             ->header('Content-Type', 'application/pdf')
             ->header('Content-Disposition', 'inline; filename="sales-person-performance-report.pdf"');
     }
+    
 }

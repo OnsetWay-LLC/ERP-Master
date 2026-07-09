@@ -1,354 +1,318 @@
 <!DOCTYPE html>
 <html lang="{{ app()->getLocale() }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
 <head>
-  <meta charset="UTF-8">
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    <meta charset="UTF-8">
+    <title>{{ app()->getLocale() === 'ar' ? 'قائمة الدخل' : 'Profit & Loss Statement' }}</title>
 
-    body {
-      font-family: dejavusans, sans-serif;
-      font-size: 13px;
-      color: #1a1a1a;
-      background: #f0f4f8;
-      padding: 32px;
-    }
+    <style>
+        body {
+            font-family: dejavusans, sans-serif;
+            font-size: 10px;
+            color: #111827;
+        }
 
-    /* === نظام التوجيه الديناميكي === */
-    .lang-ar { direction: rtl; text-align: right; }
-    .lang-en { direction: ltr; text-align: left; }
+        .company-header {
+            text-align: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #d1d5db;
+        }
 
-    .pl {
-      background: #fff;
-      border-radius: 10px;
-      overflow: hidden;
-      max-width: 1000px;
-      margin: 0 auto;
-    }
+        .company-logo {
+            margin-bottom: 5px;
+        }
 
-    .pl-top {
-      background: #0C447C;
-      padding: 20px 24px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-    }
+        .company-logo img {
+            max-height: 60px;
+            max-width: 150px;
+        }
 
-    .pl-top .lbl {
-      font-size: 10px;
-      letter-spacing: .05em;
-      text-transform: uppercase;
-      color: #85B7EB;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
+        .company-name {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
 
-    .pl-top .title {
-      font-size: 20px;
-      font-weight: 500;
-      color: #fff;
-    }
+        .company-info {
+            font-size: 9px;
+            color: #4b5563;
+            line-height: 1.5;
+        }
 
-    .pl-top-right {
-      /* الاتجاه يتبع الأب تلقائياً */
-    }
+        .custom-report-header {
+            font-size: 9px;
+            color: #374151;
+            margin-top: 5px;
+            white-space: pre-line;
+        }
 
-    .pl-top-right .date-lbl,
-    .pl-top-right .fy {
-      font-size: 10px;
-      color: #85B7EB;
-      font-weight: 600;
-      letter-spacing: .05em;
-      text-transform: uppercase;
-      margin-bottom: 2px;
-    }
+        .report-header {
+            text-align: center;
+            margin-bottom: 12px;
+        }
 
-    .pl-top-right .fy { margin-top: 4px; margin-bottom: 0; }
+        .report-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
 
-    .pl-top-right .date-val,
-    .pl-top-right .fy {
-      font-size: 12px;
-      color: #E6F1FB;
-      direction: ltr;
-      display: inline-block;
-    }
+        .report-period {
+            font-size: 10px;
+            color: #4b5563;
+        }
 
-    .section-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 16px;
-      border-bottom: 1px solid #dde5ef;
-    }
+        .section-title {
+            font-size: 12px;
+            font-weight: bold;
+            padding: 7px;
+            margin-top: 10px;
+            border: 1px solid #d1d5db;
+            background: #f3f4f6;
+        }
 
-    .section-header.income { background: #EAF5F0; border-inline-start: 4px solid #0F6E56; }
-    .section-header.expense { background: #EBF2FB; border-inline-start: 4px solid #185FA5; }
+        table.report-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
 
-    .section-header .sec-icon { font-size: 14px; }
-    .section-header .sec-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-    .section-header.income .sec-title { color: #085041; }
-    .section-header.expense .sec-title { color: #0C447C; }
+        .report-table th {
+            background: #f3f4f6;
+            font-weight: bold;
+        }
 
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .report-table th,
+        .report-table td {
+            border: 1px solid #d1d5db;
+            padding: 5px;
+            text-align: center;
+            vertical-align: middle;
+        }
 
-    thead tr { background: #0C447C; }
-    thead th {
-      padding: 9px 12px;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: .05em;
-      text-transform: uppercase;
-      color: #B5D4F4;
-      white-space: nowrap;
-      /* يتبع اتجاه الجدول */
-    }
+        .text-left {
+            text-align: left;
+        }
 
-    .income-head tr { background: #0F6E56; }
-    .income-head th { color: #A7E8D4; }
-    .expense-head tr { background: #185FA5; }
-    .expense-head th { color: #B5D4F4; }
+        .text-right {
+            text-align: right;
+        }
 
-    tbody tr { border-bottom: 1px solid #dde5ef; }
-    tbody tr:last-child { border-bottom: none; }
-    tbody tr:nth-child(even) td { background: #F9FBFD; }
+        .amount {
+            text-align: right;
+            white-space: nowrap;
+        }
 
-    tbody td {
-      padding: 9px 12px;
-      color: #1a1a1a;
-      vertical-align: middle;
-      word-break: break-word;
-      /* يتبع اتجاه الجدول */
-    }
+        .income-color {
+            color: #0f766e;
+        }
 
-    /* الخلايا التي تحتوي أرقام أو إنجليزي تبقى دائماً من اليسار للحفاظ على التنسيق المحاسبي */
-    tbody td.r, tbody td.acc-no, tbody td.en-name {
-      direction: ltr;
-      text-align: left;
-    }
-    tbody td.acc-no { font-family: monospace; font-size: 11.5px; color: #555; }
-    tbody td.r { font-family: monospace; font-size: 12px; white-space: nowrap; }
-    tbody td.en-name { font-size: 12px; color: #444; }
+        .expense-color {
+            color: #1d4ed8;
+        }
 
-    .cv { color: #0F6E56; }
-    .dv { color: #185FA5; }
+        .profit {
+            color: #0f766e;
+            font-weight: bold;
+        }
 
-    .total-row-income td, .total-row-expense td {
-      font-weight: 600;
-      font-family: monospace;
-      padding: 11px 12px;
-      border-top: 2px solid currentColor;
-    }
-    .total-row-income td { background: #D8F2E9; border-color: #0F6E56; color: #085041; }
-    .total-row-expense td { background: #DDEAF8; border-color: #185FA5; color: #0C447C; }
+        .loss {
+            color: #b91c1c;
+            font-weight: bold;
+        }
 
-    .total-row-income .tl, .total-row-expense .tl {
-      font-family: dejavusans, sans-serif;
-      font-size: 11px;
-      font-weight: 600;
-      text-align: right; /* يبقى النص على الجهة الصحيحة */
-    }
-    .total-row-income .tl { color: #0F6E56; }
-    .total-row-expense .tl { color: #185FA5; }
+        .total-row {
+            background: #f9fafb;
+            font-weight: bold;
+        }
 
-    .pl-cards {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      border-top: 2px solid #dde5ef;
-    }
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
 
-    .pl-card {
-      padding: 14px 16px;
-      border-inline-start: 1px solid #dde5ef;
-      background: #F5F8FC;
-    }
-    .pl-card:last-child { border-inline-start: none; }
+        .summary-table td {
+            border: 1px solid #d1d5db;
+            padding: 7px;
+            text-align: center;
+        }
 
-    .pl-card-lbl {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: #888;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
+        .summary-label {
+            background: #f3f4f6;
+            font-weight: bold;
+        }
 
-    .pl-card-val {
-      font-size: 17px;
-      font-weight: 500;
-      font-family: monospace;
-      direction: ltr;
-      display: inline-block;
-    }
-    .pl-card-val.income-val { color: #0F6E56; }
-    .pl-card-val.expense-val { color: #185FA5; }
-    .pl-card-val.profit-val { color: #0F6E56; }
-    .pl-card-val.loss-val { color: #B91C1C; }
+        .summary-value {
+            font-weight: bold;
+            font-size: 11px;
+        }
 
-    .closing {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 14px 20px;
-    }
-    .closing.profit { background: #0F6E56; }
-    .closing.loss { background: #991B1B; }
-
-    .cl-lbl {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      color: rgba(255,255,255,0.65);
-      font-weight: 600;
-    }
-
-    .cl-right {
-      /* يتبع الاتجاه */
-    }
-    .cl-type {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: .06em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.75);
-      margin-bottom: 2px;
-    }
-    .cl-val {
-      font-family: monospace;
-      font-size: 20px;
-      font-weight: 500;
-      color: #fff;
-      direction: ltr;
-      display: inline-block;
-    }
-  </style>
+        .empty-message {
+            text-align: center;
+            padding: 15px;
+            color: #6b7280;
+        }
+    </style>
 </head>
 
-{{-- إضافة كلاس language للـ body للتحكم في الاتجاه --}}
-<body class="{{ app()->getLocale() === 'ar' ? 'lang-ar' : 'lang-en' }}">
+<body>
 
-<div class="pl">
-
-  <div class="pl-top">
-    <div>
-      <div class="lbl">{{ app()->getLocale() === 'ar' ? 'قائمة الدخل' : 'Profit & Loss Statement' }}</div>
-      <div class="title">{{ app()->getLocale() === 'ar' ? 'قائمة الدخل' : 'Profit & Loss Statement' }}</div>
-    </div>
-
-    <div class="pl-top-right">
-      <div class="date-lbl">{{ app()->getLocale() === 'ar' ? 'الفترة' : 'Period' }}</div>
-      <div class="date-val">
-        {{ $report['from_date'] ?? (app()->getLocale() === 'ar' ? 'الكل' : 'All') }}
-        —
-        {{ $report['to_date'] ?? (app()->getLocale() === 'ar' ? 'الكل' : 'All') }}
-      </div>
-      @if(!empty($report['financial_year']))
-        <div class="fy">
-          {{ app()->getLocale() === 'ar' ? 'السنة المالية: ' : 'FY: ' }}{{ $report['financial_year'] }}
+<div class="company-header">
+    @if($company->logo)
+        <div class="company-logo">
+            <img src="{{ public_path($company->logo) }}">
         </div>
-      @endif
+    @endif
+
+    <div class="company-name">
+        {{ app()->getLocale() === 'ar'
+            ? ($company->name_ar ?? $company->name_en)
+            : ($company->name_en ?? $company->name_ar)
+        }}
     </div>
-  </div>
 
-  <div class="section-header income">
-    <span class="sec-icon">↑</span>
-    <span class="sec-title">{{ app()->getLocale() === 'ar' ? 'الإيرادات' : 'Income' }}</span>
-  </div>
+    <div class="company-info">
+        @if($company->email ?? null)
+            {{ $company->email }}
+        @endif
 
-  <table>
-    <thead class="income-head">
-      <tr>
-        <th style="width:110px">{{ app()->getLocale() === 'ar' ? 'رقم الحساب' : 'Account No.' }}</th>
-        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب عربي' : 'Account Name AR' }}</th>
-        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب إنجليزي' : 'Account Name EN' }}</th>
-        <th class="r" style="width:120px">{{ app()->getLocale() === 'ar' ? 'القيمة' : 'Value' }}</th>
-      </tr>
-    </thead>
+        @if($company->phone ?? null)
+            | {{ $company->phone }}
+        @endif
 
-    <tbody>
-      @forelse($report['income']['rows'] as $row)
-        <tr>
-          <td class="acc-no">{{ $row['account_number'] }}</td>
-          <td>{{ $row['account_name_ar'] }}</td>
-          <td class="en-name">{{ $row['account_name_en'] }}</td>
-          <td class="r cv">{{ number_format($row['value'], 2) }}</td>
-        </tr>
-      @empty
-        <tr><td colspan="4" style="text-align:center; color:#888; padding:20px;">{{ app()->getLocale() === 'ar' ? 'لا توجد إيرادات' : 'No income data' }}</td></tr>
-      @endforelse
-
-      <tr class="total-row-income">
-        <td class="tl" colspan="3">{{ app()->getLocale() === 'ar' ? 'إجمالي الإيرادات' : 'Total Income' }}</td>
-        <td class="r cv">{{ number_format($report['income']['total_income'], 2) }}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="section-header expense">
-    <span class="sec-icon">↓</span>
-    <span class="sec-title">{{ app()->getLocale() === 'ar' ? 'المصاريف' : 'Expenses' }}</span>
-  </div>
-
-  <table>
-    <thead class="expense-head">
-      <tr>
-        <th style="width:110px">{{ app()->getLocale() === 'ar' ? 'رقم الحساب' : 'Account No.' }}</th>
-        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب عربي' : 'Account Name AR' }}</th>
-        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب إنجليزي' : 'Account Name EN' }}</th>
-        <th class="r" style="width:120px">{{ app()->getLocale() === 'ar' ? 'القيمة' : 'Value' }}</th>
-      </tr>
-    </thead>
-
-    <tbody>
-      @forelse($report['expenses']['rows'] as $row)
-        <tr>
-          <td class="acc-no">{{ $row['account_number'] }}</td>
-          <td>{{ $row['account_name_ar'] }}</td>
-          <td class="en-name">{{ $row['account_name_en'] }}</td>
-          <td class="r dv">{{ number_format($row['value'], 2) }}</td>
-        </tr>
-      @empty
-        <tr><td colspan="4" style="text-align:center; color:#888; padding:20px;">{{ app()->getLocale() === 'ar' ? 'لا توجد مصاريف' : 'No expenses data' }}</td></tr>
-      @endforelse
-
-      <tr class="total-row-expense">
-        <td class="tl" colspan="3">{{ app()->getLocale() === 'ar' ? 'إجمالي المصاريف' : 'Total Expenses' }}</td>
-        <td class="r dv">{{ number_format($report['expenses']['total_expenses'], 2) }}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  @php $isProfit = $report['result_type'] === 'profit'; @endphp
-
-  <div class="pl-cards">
-    <div class="pl-card">
-      <div class="pl-card-lbl">{{ app()->getLocale() === 'ar' ? 'إجمالي الإيرادات' : 'Total Income' }}</div>
-      <div class="pl-card-val income-val">{{ number_format($report['income']['total_income'], 2) }}</div>
+        @if($company->country ?? null)
+            | {{ $company->country }}
+        @endif
     </div>
-    <div class="pl-card">
-      <div class="pl-card-lbl">{{ app()->getLocale() === 'ar' ? 'إجمالي المصاريف' : 'Total Expenses' }}</div>
-      <div class="pl-card-val expense-val">{{ number_format($report['expenses']['total_expenses'], 2) }}</div>
-    </div>
-    <div class="pl-card">
-      <div class="pl-card-lbl">{{ app()->getLocale() === 'ar' ? 'صافي النتيجة' : 'Net Result' }}</div>
-      <div class="pl-card-val {{ $isProfit ? 'profit-val' : 'loss-val' }}">{{ number_format(abs($report['net_result']), 2) }}</div>
-    </div>
-  </div>
 
-  <div class="closing {{ $isProfit ? 'profit' : 'loss' }}">
-    <span class="cl-lbl">{{ app()->getLocale() === 'ar' ? 'النتيجة النهائية' : 'Final Result' }}</span>
-    <div class="cl-right">
-      <div class="cl-type">
-        @if($isProfit) {{ app()->getLocale() === 'ar' ? '▲ ربح' : '▲ Profit' }}
-        @else {{ app()->getLocale() === 'ar' ? '▼ خسارة' : '▼ Loss' }} @endif
-      </div>
-      <div class="cl-val">{{ number_format(abs($report['net_result']), 2) }}</div>
-    </div>
-  </div>
-
+    @if($company->report_header)
+        <div class="custom-report-header">
+            {!! nl2br(e($company->report_header)) !!}
+        </div>
+    @endif
 </div>
+
+<div class="report-header">
+    <div class="report-title">
+        {{ app()->getLocale() === 'ar' ? 'قائمة الدخل' : 'Profit & Loss Statement' }}
+    </div>
+
+    <div class="report-period">
+        @if(!empty($report['financial_year']))
+            {{ app()->getLocale() === 'ar' ? 'السنة المالية:' : 'Financial Year:' }}
+            {{ $report['financial_year'] }}
+        @endif
+    </div>
+</div>
+
+<div class="section-title income-color">
+    {{ app()->getLocale() === 'ar' ? 'الإيرادات' : 'Income' }}
+</div>
+
+<table class="report-table">
+    <thead>
+    <tr>
+        <th>#</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'رقم الحساب' : 'Account No.' }}</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب عربي' : 'Account Name AR' }}</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب إنجليزي' : 'Account Name EN' }}</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'القيمة' : 'Value' }}</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    @forelse($report['income']['rows'] ?? [] as $index => $row)
+        <tr>
+            <td>{{ $index + 1 }}</td>
+            <td>{{ $row['account_number'] ?? '—' }}</td>
+            <td class="text-right">{{ $row['account_name_ar'] ?? '—' }}</td>
+            <td class="text-left">{{ $row['account_name_en'] ?? '—' }}</td>
+            <td class="amount income-color">{{ number_format($row['value'] ?? 0, 2) }}</td>
+        </tr>
+    @empty
+        <tr>
+            <td colspan="5" class="empty-message">
+                {{ app()->getLocale() === 'ar' ? 'لا توجد إيرادات.' : 'No income data.' }}
+            </td>
+        </tr>
+    @endforelse
+    </tbody>
+
+    <tfoot>
+    <tr class="total-row">
+        <td colspan="4">{{ app()->getLocale() === 'ar' ? 'إجمالي الإيرادات' : 'Total Income' }}</td>
+        <td class="amount income-color">{{ number_format($report['income']['total_income'] ?? 0, 2) }}</td>
+    </tr>
+    </tfoot>
+</table>
+
+<div class="section-title expense-color">
+    {{ app()->getLocale() === 'ar' ? 'المصاريف' : 'Expenses' }}
+</div>
+
+<table class="report-table">
+    <thead>
+    <tr>
+        <th>#</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'رقم الحساب' : 'Account No.' }}</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب عربي' : 'Account Name AR' }}</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'اسم الحساب إنجليزي' : 'Account Name EN' }}</th>
+        <th>{{ app()->getLocale() === 'ar' ? 'القيمة' : 'Value' }}</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    @forelse($report['expenses']['rows'] ?? [] as $index => $row)
+        <tr>
+            <td>{{ $index + 1 }}</td>
+            <td>{{ $row['account_number'] ?? '—' }}</td>
+            <td class="text-right">{{ $row['account_name_ar'] ?? '—' }}</td>
+            <td class="text-left">{{ $row['account_name_en'] ?? '—' }}</td>
+            <td class="amount expense-color">{{ number_format($row['value'] ?? 0, 2) }}</td>
+        </tr>
+    @empty
+        <tr>
+            <td colspan="5" class="empty-message">
+                {{ app()->getLocale() === 'ar' ? 'لا توجد مصاريف.' : 'No expenses data.' }}
+            </td>
+        </tr>
+    @endforelse
+    </tbody>
+
+    <tfoot>
+    <tr class="total-row">
+        <td colspan="4">{{ app()->getLocale() === 'ar' ? 'إجمالي المصاريف' : 'Total Expenses' }}</td>
+        <td class="amount expense-color">{{ number_format($report['expenses']['total_expenses'] ?? 0, 2) }}</td>
+    </tr>
+    </tfoot>
+</table>
+
+@php
+    $isProfit = ($report['result_type'] ?? 'profit') === 'profit';
+@endphp
+
+<table class="summary-table">
+    <tr>
+        <td class="summary-label">{{ app()->getLocale() === 'ar' ? 'إجمالي الإيرادات' : 'Total Income' }}</td>
+        <td class="summary-label">{{ app()->getLocale() === 'ar' ? 'إجمالي المصاريف' : 'Total Expenses' }}</td>
+        <td class="summary-label">{{ app()->getLocale() === 'ar' ? 'صافي النتيجة' : 'Net Result' }}</td>
+        <td class="summary-label">{{ app()->getLocale() === 'ar' ? 'نوع النتيجة' : 'Result Type' }}</td>
+    </tr>
+
+    <tr>
+        <td class="summary-value income-color">{{ number_format($report['income']['total_income'] ?? 0, 2) }}</td>
+        <td class="summary-value expense-color">{{ number_format($report['expenses']['total_expenses'] ?? 0, 2) }}</td>
+        <td class="summary-value {{ $isProfit ? 'profit' : 'loss' }}">
+            {{ number_format(abs($report['net_result'] ?? 0), 2) }}
+        </td>
+        <td class="summary-value {{ $isProfit ? 'profit' : 'loss' }}">
+            {{ $isProfit
+                ? (app()->getLocale() === 'ar' ? 'ربح' : 'Profit')
+                : (app()->getLocale() === 'ar' ? 'خسارة' : 'Loss')
+            }}
+        </td>
+    </tr>
+</table>
 
 </body>
 </html>

@@ -9,6 +9,8 @@ use App\Models\DeliveryNote;
 use App\Models\PickList;
 use App\Services\DeliveryNote\DeliveryNoteService;
 use Illuminate\Http\JsonResponse;
+use App\Models\Company;
+use Mpdf\Mpdf;
 
 class DeliveryNoteController extends Controller
 {
@@ -65,4 +67,51 @@ class DeliveryNoteController extends Controller
             'data' => new DeliveryNoteResource($note),
         ]);
     }
+    public function pdf(DeliveryNote $deliveryNote)
+{
+    $company = Company::query()->firstOrFail();
+
+    $deliveryNote = $this->service->show($deliveryNote);
+
+    $html = view('pdf.delivery-note', [
+        'company' => $company,
+        'deliveryNote' => $deliveryNote,
+        'locale' => app()->getLocale(),
+    ])->render();
+
+    $mpdf = new Mpdf([
+        'mode' => 'utf-8',
+        'format' => 'A4',
+        'default_font' => 'dejavusans',
+        'margin_top' => 8,
+        'margin_bottom' => 18,
+        'margin_left' => 8,
+        'margin_right' => 8,
+    ]);
+
+    if (app()->getLocale() === 'ar') {
+        $mpdf->SetDirectionality('rtl');
+    }
+
+    $this->applySystemFooter($mpdf);
+
+    $mpdf->WriteHTML($html);
+
+    return response($mpdf->Output('delivery-note.pdf', 'S'))
+        ->header('Content-Type', 'application/pdf')
+        ->header('Content-Disposition', 'inline; filename="delivery-note.pdf"');
+}
+
+private function applySystemFooter(Mpdf $mpdf): void
+{
+    $footerImage = app()->getLocale() === 'ar'
+        ? public_path('images/reports/system-footer-ar.png')
+        : public_path('images/reports/system-footer-en.png');
+
+    $mpdf->SetHTMLFooter('
+        <div style="text-align:center; padding-top:4px;">
+            <img src="' . $footerImage . '" style="width:100%; max-width:650px;">
+        </div>
+    ');
+}
 }

@@ -6,7 +6,10 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\PayrollTaxSetting;
 use App\Notifications\EmployeeCreatedNotification;
+use App\Exports\EmployeeAllowancesExport;
+use App\Imports\EmployeeAllowancesImport;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 
 class EmployeeService
 {
@@ -352,5 +355,29 @@ class EmployeeService
         }
 
         $employee->restore();   
+}
+public function export()
+{
+    return Excel::download(
+        new EmployeeAllowancesExport(),
+        'employee_allowances.xlsx'
+    );
+}
+
+public function import(Request $request)
+{
+    $request->validate([
+        'file' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+    ]);
+
+    Excel::import(
+        new EmployeeAllowancesImport(),
+        $request->file('file')
+    );
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Employee allowances imported successfully.',
+    ]);
 }
 }

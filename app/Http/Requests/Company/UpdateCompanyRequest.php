@@ -37,7 +37,7 @@ class UpdateCompanyRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:255'],
 
             'working_days' => ['sometimes', 'array', 'size:7'],
-
+            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,svg', 'max:2048'],
             'working_days.*.day' => [
                 'required_with:working_days',
                 Rule::in([
@@ -55,6 +55,10 @@ class UpdateCompanyRequest extends FormRequest
                 'required_with:working_days',
                 'boolean',
             ],
+            'report_header' => ['nullable', 'string'],
+'report_footer' => ['nullable', 'string'],
+'show_logo_in_reports' => ['nullable', 'boolean'],
+'show_company_info_in_reports' => ['nullable', 'boolean'],
         ];
     }
 }

@@ -90,7 +90,8 @@ class PermissionSeeder extends Seeder
            'screen.accounts_payable_report',
            'screen.warehouse_wise_stock_balance_report',
            'screen.audit_report',
-           'screen.balance_sheet'
+           'screen.balance_sheet',
+           'screen.notifications'
           
 
         ];

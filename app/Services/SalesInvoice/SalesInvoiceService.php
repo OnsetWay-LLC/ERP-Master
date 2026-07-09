@@ -217,7 +217,7 @@ class SalesInvoiceService
     if ($salesInvoice->status !== 'draft') {
         throw new RuntimeException('Only draft invoices can be submitted.');
     }
-
+$this->ensureNoPreviousDraftInvoice($salesInvoice);
     $pendingApproval = DiscountApprovalRequest::query()
         ->where('sales_invoice_id', $salesInvoice->id)
         ->whereIn('status', [
@@ -1050,4 +1050,21 @@ private function resolveItemRate(array $row, Item $item): float
 
         return 'JV-' . now()->year . '-' . str_pad((string) $nextNumber, 5, '0', STR_PAD_LEFT);
     }
+    private function ensureNoPreviousDraftInvoice(SalesInvoice $salesInvoice): void
+{
+    $previousDraftInvoice = SalesInvoice::query()
+        ->where('company_id', $salesInvoice->company_id)
+        ->where('id', '<', $salesInvoice->id)
+        ->where('status', 'draft')
+        ->orderByDesc('id')
+        ->first();
+
+    if ($previousDraftInvoice) {
+        throw new RuntimeException(
+            'Cannot submit this invoice because previous invoice '
+            . $previousDraftInvoice->invoice_number
+            . ' is still in draft status.'
+        );
+    }
+}
 }

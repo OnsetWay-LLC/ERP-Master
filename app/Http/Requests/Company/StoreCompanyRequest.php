@@ -35,6 +35,7 @@ class StoreCompanyRequest extends FormRequest
             'fax' => ['nullable', 'string', 'max:50'],
             'phone' => ['required', 'string', 'max:20'],
             'email' => ['required', 'email', 'max:255'],
+            'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif,svg', 'max:2048'],
 
             'working_days' => ['required', 'array', 'size:7'],
 
@@ -50,6 +51,10 @@ class StoreCompanyRequest extends FormRequest
                     'friday',
                 ]),
             ],
+            'report_header' => ['nullable', 'string'],
+'report_footer' => ['nullable', 'string'],
+'show_logo_in_reports' => ['nullable', 'boolean'],
+'show_company_info_in_reports' => ['nullable', 'boolean'],
 
             'working_days.*.is_working_day' => ['required', 'boolean'],
         ];

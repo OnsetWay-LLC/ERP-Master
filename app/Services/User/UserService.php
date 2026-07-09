@@ -19,7 +19,6 @@ class UserService
             $query->where(function ($q) use ($search) {
                 $q->where('username', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('name', 'like', "%{$search}%")
                   ->orWhereHas('employee', function ($employeeQuery) use ($search) {
                       $employeeQuery->where('full_name_ar', 'like', "%{$search}%")
                       ->orWhere('full_name_en', 'like', "%{$search}%")

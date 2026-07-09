@@ -77,6 +77,8 @@ use App\Http\Controllers\Api\Reports\AccountsPayableReportController;
 use App\Http\Controllers\Api\Reports\WarehouseWiseStockBalanceReportController;
 use App\Http\Controllers\Api\AuditReport\AuditReportController;
 use App\Http\Controllers\Api\Reports\BalanceSheetReportController;
+use App\Http\Controllers\Api\Reports\PayrollReportController;
+use App\Http\Controllers\Api\Database\DatabaseManagementController;
 use Illuminate\Support\Facades\Route;
 
 
@@ -116,10 +118,16 @@ Route::prefix('payroll-tax-settings')
         Route::get('/{department}', [DepartmentController::class, 'show']);
         Route::put('/{department}', [DepartmentController::class, 'update']);
         Route::delete('/{department}', [DepartmentController::class, 'destroy']);
+        Route::post(
+    '/{id}/restore',
+    [DepartmentController::class, 'restore']
+);
     });
     Route::prefix('employees')
-    ->middleware(['auth:api', 'permission:screen.employees,api', 'locale','audit.log'])
+    ->middleware(['auth:api', 'permission:screen.employees,api', 'locale', 'audit.log'])
     ->group(function () {
+      Route::get('/hr-master/export', [EmployeeController::class, 'exportHrMaster']);
+      Route::post('/hr-master/import', [EmployeeController::class, 'importHrMaster']);
         Route::get('/', [EmployeeController::class, 'index']);
         Route::post('/', [EmployeeController::class, 'store']);
         Route::get('/{employee}', [EmployeeController::class, 'show']);
@@ -162,6 +170,8 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
     Route::prefix('customers')
     ->middleware(['auth:api', 'permission:screen.customers,api', 'locale','audit.log'])
     ->group(function () {
+        Route::get('/export', [CustomerController::class, 'export']);
+        Route::post('/import', [CustomerController::class, 'import']);
         Route::get('/', [CustomerController::class, 'index']);
         Route::post('/', [CustomerController::class, 'store']);
         Route::get('/{customer}', [CustomerController::class, 'show']);
@@ -172,12 +182,15 @@ Route::get('/{employeeLeave}', [EmployeeLeaveController::class, 'show']);
     Route::prefix('suppliers')
     ->middleware(['auth:api', 'permission:screen.suppliers,api', 'locale','audit.log'])
     ->group(function () {
+        Route::get('/export', [SupplierController::class, 'export']);
+        Route::post('/import', [SupplierController::class, 'import']);
         Route::get('/', [SupplierController::class, 'index']);
         Route::post('/', [SupplierController::class, 'store']);
         Route::get('/{supplier}', [SupplierController::class, 'show']);
         Route::put('/{supplier}', [SupplierController::class, 'update']);
         Route::delete('/{supplier}', [SupplierController::class, 'destroy']);
         Route::post('/{supplier}/restore', [SupplierController::class, 'restore'])->withTrashed();
+        
     });
     Route::prefix('warehouses')
     ->middleware(['auth:api', 'permission:screen.warehouses,api', 'locale','audit.log'])
@@ -414,6 +427,7 @@ Route::middleware(['auth:api', 'permission:screen.pick_lists', 'locale','audit.l
 
         Route::post('/{deliveryNote}/submit', [DeliveryNoteController::class, 'submit']);
         Route::post('/{deliveryNote}/cancel', [DeliveryNoteController::class, 'cancel']);
+        Route::get('/{deliveryNote}/pdf', [DeliveryNoteController::class, 'pdf']);
     });
 
     Route::middleware(['auth:api', 'permission:screen.monthly_distributions', 'locale','audit.log'])
@@ -463,9 +477,11 @@ Route::post('sales-payments/{salesPayment}/cancel', [SalesPaymentController::cla
        Route::middleware(['auth:api', 'permission:screen.sales_person_performance_report', 'locale','audit.log'])
     ->prefix('reports')
     ->group(function () {
-        Route::get('/sales-person-performance', [SalesPersonPerformanceReportController::class, 'index']);
-        Route::get('/sales-person-performance/pdf', [SalesPersonPerformanceReportController::class, 'pdf']);
+       Route::get('/sales-person-performance-report', [SalesPersonPerformanceReportController::class, 'index']);
+Route::get('/sales-person-performance-report/pdf', [SalesPersonPerformanceReportController::class, 'pdf']);
+Route::post('/sales-person-performance-report/post-commission', [SalesPersonPerformanceReportController::class, 'postCommission']);
     });
+
     Route::prefix('discount-approvals')->group(function () {
     Route::get('/', [DiscountApprovalController::class, 'index']);
     Route::get('/my-requests', [DiscountApprovalController::class, 'myRequests']);
@@ -710,3 +726,24 @@ Route::middleware(['auth:api', 'permission:screen.audit_report', 'locale'])
         Route::get('/reports/balance-sheet/pdf', [BalanceSheetReportController::class, 'pdf']);
     });
 
+Route::middleware(['auth:api', 'role:CFO|HR','locale', 'audit.log'])
+    ->prefix('HRreports')
+    ->group(function () {
+        Route::get('/payroll-report', [PayrollReportController::class, 'index']);
+        Route::get('/payroll-report/pdf', [PayrollReportController::class, 'pdf']);
+        Route::post('/payroll-report/post-journal-entries', [PayrollReportController::class, 'postJournalEntries']);
+        Route::get('/payroll-report/range', [PayrollReportController::class, 'range']);
+        Route::get('/payroll-report/range/pdf', [PayrollReportController::class, 'rangePdf']);
+        Route::get('/payroll-report/range/pdf', [PayrollReportController::class, 'rangePdf']);
+    });
+
+    Route::prefix('database')
+    ->middleware(['auth:api', 'role:CFO','locale', 'audit.log'])
+    ->group(function () {
+        Route::post('/backup', [DatabaseManagementController::class, 'backup']);
+        Route::get('/backups', [DatabaseManagementController::class, 'backups']);
+        Route::get('/backups/{file}', [DatabaseManagementController::class, 'download']);
+          Route::post('/restore', [DatabaseManagementController::class, 'restore']);
+        Route::delete('/backups/{file}', [DatabaseManagementController::class, 'delete']);
+      
+    });

@@ -279,6 +279,97 @@
             .no-print { display: none !important; }
             .invoice-box { border: none; }
         }
+        .company-logo {
+    max-height: 55px;
+    max-width: 130px;
+    margin-bottom: 8px;
+}
+
+.company-report-header {
+    font-size: 10px;
+    color: #dbeafe;
+    margin-top: 5px;
+    line-height: 1.5;
+}
+
+.invoice-custom-footer {
+    margin: 0 28px 12px;
+    padding: 12px 16px;
+    background: #f0f7ff;
+    border: 0.5px solid #b5d4f4;
+    border-radius: 8px;
+    font-size: 11px;
+    color: #042c53;
+    line-height: 1.7;
+    text-align: center;
+}
+
+.invoice-system-footer {
+    text-align: center;
+    padding: 0 28px 22px;
+}
+
+.invoice-system-footer img {
+    width: 100%;
+    max-width: 620px;
+    height: auto;
+}
+.inv-banner {
+    background: #1764a7;
+    color: white;
+    padding: 18px 22px 15px;
+    text-align: center;
+}
+
+.inv-banner > div {
+    width: 100%;
+    text-align: center;
+}
+
+.company-logo {
+    display: block;
+    max-height: 55px;
+    max-width: 130px;
+    margin: 0 auto 8px auto;
+}
+
+.inv-title {
+    text-align: center;
+}
+
+.inv-title-main {
+    text-align: center;
+}
+
+.inv-title-sub {
+    text-align: center;
+}
+
+.company-report-header {
+    text-align: center;
+    margin-top: 5px;
+}
+.report-footer {
+    margin: 15px 28px 10px;
+    padding: 10px 15px;
+    text-align: center;
+    font-size: 10px;
+    line-height: 1.6;
+    color: #374151;
+    border-top: 1px solid #d1d5db;
+}
+
+.system-footer {
+    text-align: center;
+    margin-top: 8px;
+    padding: 5px 28px 15px;
+}
+
+.system-footer img {
+    width: 100%;
+    max-width: 650px;
+    height: auto;
+}
     </style>
 </head>
 <body>
@@ -301,9 +392,22 @@
 <div class="invoice-box">
 
     {{-- ── Blue banner ── --}}
-    <div class="inv-banner">
-        <div>
-            <div class="inv-title">
+   <div class="inv-banner">
+    <div>
+        @if($invoice->company?->logo)
+            <img
+                class="company-logo"
+                src="{{ public_path($invoice->company->logo) }}"
+                alt="Company Logo"
+            >
+        @endif
+
+        <div class="inv-title">
+            @if($invoice->company?->report_header)
+    <div class="company-report-header">
+        {!! nl2br(e($invoice->company->report_header)) !!}
+    </div>
+@endif
                 @if($locale === 'ar') فاتورة مبيعات
                 @elseif($locale === 'en') SALES INVOICE
                 @else فاتورة مبيعات &nbsp;|&nbsp; SALES INVOICE
@@ -530,6 +634,26 @@
             </div>
         </div>
     </div>
+
+{{-- Report Footer --}}
+@if(!empty($invoice->company?->report_footer))
+    <div class="report-footer">
+        {!! nl2br(e($invoice->company->report_footer)) !!}
+    </div>
+@endif
+
+{{-- System Footer --}}
+@php
+    $systemFooterImage = $locale === 'en'
+        ? public_path('images/reports/system-footer-en.png')
+        : public_path('images/reports/system-footer-ar.png');
+@endphp
+
+<div class="system-footer">
+    <img src="{{ $systemFooterImage }}" alt="System Footer">
+</div>
+
+
 
 </div>
 </body>

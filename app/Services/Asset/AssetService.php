@@ -232,12 +232,15 @@ public function submit(Asset $asset): Asset
             'status' => 'submitted',
         ]);
 
-       return $asset->fresh([
-    'assetItem',
-    'assetCategory',
-    'location',
-    'journalEntries.lines.account',
-]);
+        // مهم: بعد ما يصير الأصل submitted، رحّل كل قيود الإهلاك المستحقة سابقًا
+        $this->postDueDepreciationSchedules($asset->fresh());
+
+        return $asset->fresh([
+            'assetItem',
+            'assetCategory',
+            'location',
+            'journalEntries.lines.account',
+        ]);
     });
 }
 
@@ -591,8 +594,8 @@ private function createDepreciationSchedule(Asset $asset): void
 
         $depreciationAmount = match ($method) {
             'straight_line' => $this->calculateStraightLineDepreciation(
-                $bookValue,
-                $remainingCount - $i + 1
+                $netPurchaseAmount,
+                $totalCount
             ),
 
             'written_down_value' => $this->calculateWrittenDownValueDepreciation(
@@ -620,7 +623,7 @@ private function createDepreciationSchedule(Asset $asset): void
         }
 
         $scheduleDate = $startDate->copy()
-            ->addMonths(($i - 1) * $frequencyMonth);
+            ->addMonths(($scheduleNo * $frequencyMonth) - 1);
 
         $scheduleDate->day(min($postingDay, $scheduleDate->daysInMonth));
 
@@ -673,6 +676,115 @@ private function calculateDoubleDecliningDepreciation(
     $doubleDecliningRate = 2 / $totalDepreciationCount;
 
     return $bookValue * $doubleDecliningRate;
+}
+private function postDueDepreciationSchedules(Asset $asset): void
+{
+    $asset->loadMissing('assetCategory');
+
+    $category = $asset->assetCategory;
+
+    if (! $category) {
+        throw new InvalidArgumentException('Asset category is required.');
+    }
+
+    if (! $category->depreciation_expense_account_id || ! $category->accumulated_depreciation_account_id) {
+        throw new InvalidArgumentException('Depreciation accounts are required in asset category.');
+    }
+
+    $expenseAccountId = $this->validatePostingAccount(
+        $asset->company_id,
+        (int) $category->depreciation_expense_account_id,
+        'Depreciation Expense Account'
+    );
+
+    $accumulatedAccountId = $this->validatePostingAccount(
+        $asset->company_id,
+        (int) $category->accumulated_depreciation_account_id,
+        'Accumulated Depreciation Account'
+    );
+
+    $dueSchedules = DB::table('asset_depreciation_schedules')
+        ->where('company_id', $asset->company_id)
+        ->where('asset_id', $asset->id)
+        ->where('status', 'pending')
+        ->whereDate('schedule_date', '<=', now()->toDateString())
+        ->orderBy('schedule_date')
+        ->orderBy('schedule_no')
+        ->lockForUpdate()
+        ->get();
+
+    foreach ($dueSchedules as $schedule) {
+        $alreadyPosted = DB::table('asset_depreciation_schedules')
+            ->where('company_id', $asset->company_id)
+            ->where('asset_id', $asset->id)
+            ->where('schedule_no', $schedule->schedule_no)
+            ->where('status', 'posted')
+            ->exists();
+
+        if ($alreadyPosted) {
+            continue;
+        }
+
+        $amount = round((float) $schedule->depreciation_amount, 3);
+
+        if ($amount <= 0) {
+            continue;
+        }
+
+        app(\App\Services\FinancialYear\FinancialYearService::class)
+            ->validateTransactionDate(
+                $asset->company_id,
+                $schedule->schedule_date,
+                'create'
+            );
+
+        $journalEntryId = DB::table('journal_entries')->insertGetId([
+            'company_id' => $asset->company_id,
+            'entry_number' => $this->generateJournalEntryNumber($asset->company_id),
+            'entry_date' => $schedule->schedule_date,
+            'source_type' => 'asset_depreciation',
+            'asset_id' => $asset->id,
+            'status' => 'posted',
+            'total_debit' => $amount,
+            'total_credit' => $amount,
+            'description' => 'Asset Depreciation | Asset: ' . $asset->series . ' | Schedule No: ' . $schedule->schedule_no,
+            'created_by' => auth('api')->id(),
+            'posted_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+      DB::table('journal_entry_lines')->insert([
+    'company_id' => $asset->company_id,
+    'journal_entry_id' => $journalEntryId,
+    'account_id' => $expenseAccountId,
+    'debit' => $amount,
+    'credit' => 0,
+    'note' => 'Depreciation expense - ' . $asset->series . ' - Schedule No: ' . $schedule->schedule_no,
+    'created_at' => now(),
+    'updated_at' => now(),
+]);
+
+DB::table('journal_entry_lines')->insert([
+    'company_id' => $asset->company_id,
+    'journal_entry_id' => $journalEntryId,
+    'account_id' => $accumulatedAccountId,
+    'debit' => 0,
+    'credit' => $amount,
+    'note' => 'Accumulated depreciation - ' . $asset->series . ' - Schedule No: ' . $schedule->schedule_no,
+    'created_at' => now(),
+    'updated_at' => now(),
+]);
+
+        DB::table('asset_depreciation_schedules')
+            ->where('id', $schedule->id)
+            ->where('status', 'pending')
+            ->update([
+                'status' => 'posted',
+                'journal_entry_id' => $journalEntryId,
+                'updated_at' => now(),
+            ]);
+    }
 }
 }
   

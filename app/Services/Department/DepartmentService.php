@@ -80,4 +80,12 @@ public function create(array $data): Department
     {
         $department->delete();
     }
+    public function restore(Department $department): void
+{
+    if (! $department->trashed()) {
+        abort(400, 'Department is not deleted.');
+    }
+
+    $department->restore();
+}
 }

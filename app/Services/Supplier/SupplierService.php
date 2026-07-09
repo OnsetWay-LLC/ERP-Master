@@ -111,38 +111,55 @@ private function createOpeningBalanceJournalEntry(int $companyId, Supplier $supp
 
     $amount = (float) $supplier->opening_balance;
 
-    $entryNumber = 'JV-' . now()->format('Y') . '-' . str_pad(
-        (string) (JournalEntry::where('company_id', $companyId)->count() + 1),
-        5,
-        '0',
-        STR_PAD_LEFT
+    $year = now()->format('Y');
+
+    $lastEntryNumber = JournalEntry::query()
+        ->where('company_id', $companyId)
+        ->where('entry_number', 'like', "JV-{$year}-%")
+        ->orderByDesc('id')
+        ->value('entry_number');
+
+    $nextNumber = 1;
+
+    if ($lastEntryNumber) {
+        $parts = explode('-', $lastEntryNumber);
+
+        if (count($parts) === 3) {
+            $nextNumber = ((int) $parts[2]) + 1;
+        }
+    }
+
+    $entryNumber = sprintf(
+        'JV-%s-%05d',
+        $year,
+        $nextNumber
     );
 
     $journalEntry = JournalEntry::create([
-        'company_id' => $companyId,
+        'company_id'   => $companyId,
         'entry_number' => $entryNumber,
-        'entry_date' => now()->toDateString(),
-        'total_debit' => $amount,
+        'entry_date'   => now()->toDateString(),
+        'total_debit'  => $amount,
         'total_credit' => $amount,
-        'description' => 'Supplier Opening Balance - ' . $supplier->supplier_name_en,
-        'status' => 'posted',
-        'created_by' => auth('api')->id(),
+        'description'  => 'Supplier Opening Balance - ' . ($supplier->supplier_name_en ?? $supplier->supplier_name_ar),
+        'status'       => 'posted',
+        'created_by'   => auth('api')->id(),
     ]);
 
     $journalEntry->lines()->create([
         'company_id' => $companyId,
         'account_id' => $settings->other_account_id,
-        'debit' => $amount,
-        'credit' => 0,
-        'note' => 'Supplier Opening Balance',
+        'debit'      => $amount,
+        'credit'     => 0,
+        'note'       => 'Supplier Opening Balance',
     ]);
 
     $journalEntry->lines()->create([
         'company_id' => $companyId,
         'account_id' => $settings->default_payable_account_id,
-        'debit' => 0,
-        'credit' => $amount,
-        'note' => 'Supplier Opening Balance',
+        'debit'      => 0,
+        'credit'     => $amount,
+        'note'       => 'Supplier Opening Balance',
     ]);
 
     return $journalEntry;

@@ -97,7 +97,8 @@ class RolePermissionSeeder extends Seeder
                   'screen.accounts_payable_report',
                   'screen.warehouse_wise_stock_balance_report',
                    'screen.audit_report',
-                   'screen.balance_sheet'
+                   'screen.balance_sheet',
+                   'screen.notifications'
 
 
         ]);
@@ -142,7 +143,8 @@ class RolePermissionSeeder extends Seeder
             'screen.purchase_returns',
             'screen.supplier_ledger_reports',
             'screen.ItemWisePurchaseRegisterReport',
-            'screen.balance_sheet'
+            'screen.balance_sheet',
+            'screen.notifications'
 
         ]);
 
